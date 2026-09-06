@@ -7,7 +7,7 @@ export default function ReconcileReview({ suggestions, onApply, onClose }: any) 
     setSelected(s => ({ ...s, [id]: !s[id] }))
   }
 
-  const items = Object.entries(suggestions || {})
+  const items = Object.entries(suggestions || {}) as Array<[string, Array<{ journalLineId: string; description?: string; amount?: string | number; confidence?: number }>]> 
 
   async function applySelected() {
     const mappings: any[] = []

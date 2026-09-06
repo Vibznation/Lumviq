@@ -3,7 +3,7 @@ import { postJournalEntry } from '../src/lib/ledger'
 
 describe('posting rules - closed periods', () => {
   it('rejects posting into a closed period', async () => {
-    const prismaMock = {
+    const prismaMock: any = {
       accountingPeriod: { findFirst: vi.fn(async () => ({ id: 'p1', isClosed: true })) },
       journalEntry: { findUnique: vi.fn(async () => null), create: vi.fn() },
       auditEvent: { create: vi.fn() },

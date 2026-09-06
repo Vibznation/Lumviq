@@ -10,11 +10,10 @@ describe('postJournalEntry behavior (mocked Prisma)', () => {
 
   it('returns existing entry when idempotency key present', async () => {
     const existing = { id: 'existing-id', idempotencyKey: 'idem-1' }
-    const prismaMock = {
+    const prismaMock: any = {
       journalEntry: { findUnique: vi.fn(async ({ where }: any) => existing), create: vi.fn() },
       auditEvent: { create: vi.fn() },
       $transaction: vi.fn(async (fn: any) => {
-        // call provided function with a prisma-like client
         return fn(prismaMock)
       })
     }
@@ -27,7 +26,7 @@ describe('postJournalEntry behavior (mocked Prisma)', () => {
 
   it('creates entry when idempotency key not found', async () => {
     const created = { id: 'new-id' }
-    const prismaMock = {
+    const prismaMock: any = {
       journalEntry: { findUnique: vi.fn(async () => null), create: vi.fn(async () => created) },
       auditEvent: { create: vi.fn() },
       $transaction: vi.fn(async (fn: any) => fn(prismaMock))

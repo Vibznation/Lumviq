@@ -8,138 +8,240 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  passwordHash String?
-  emailVerified Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  memberships OrganizationMembership[]
+  id            String                 @id @default(uuid()) @db.Uuid
+  email         String                 @unique
+  name          String?
+  passwordHash  String?                @map("password_hash")
+  emailVerified Boolean                @default(false) @map("email_verified")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  memberships   OrganizationMembership[]
+
+  @@map("users")
 }
 
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  memberships OrganizationMembership[]
-  accounts  Account[]
+  id             String                  @id @default(uuid()) @db.Uuid
+  name           String
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  memberships    OrganizationMembership[]
+  accounts       Account[]
   journalEntries JournalEntry[]
-  fiscalYears FiscalYear[]
-  invitations OrganizationInvitation[]
+  fiscalYears    FiscalYear[]
+  invitations    OrganizationInvitation[]
+  bankAccounts   BankAccount[]
+  sessions       ReconciliationSession[]
+
+  @@map("organizations")
 }
 
 model OrganizationMembership {
-  id             String   @id @default(uuid())
-  user           User     @relation(fields: [userId], references: [id])
-  userId         String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String
+  id             String      @id @default(uuid()) @db.Uuid
+  userId         String      @map("user_id")
+  organizationId String      @map("organization_id")
   role           String
-  roleId         String?  
-  roleRef        Role?    @relation(fields: [roleId], references: [id])
-  createdAt      DateTime @default(now())
+  roleId         String?     @map("role_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleRef        Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, organizationId])
+  @@map("organization_memberships")
 }
 
 model Role {
-  id        String @id @default(uuid())
-  name      String @unique
+  id          String              @id @default(uuid()) @db.Uuid
+  name        String              @unique
   description String?
   memberships OrganizationMembership[]
   rolePermissions RolePermission[]
+
+  @@map("roles")
 }
 
 model Permission {
-  id   String @id @default(uuid())
-  name String @unique
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String          @unique
   description String?
   rolePermissions RolePermission[]
+
+  @@map("permissions")
 }
 
 model RolePermission {
-  id String @id @default(uuid())
-  role Role @relation(fields: [roleId], references: [id])
-  roleId String
-  permission Permission @relation(fields: [permissionId], references: [id])
-  permissionId String
+  id           String     @id @default(uuid()) @db.Uuid
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
 }
 
 model Account {
-  id             String   @id @default(uuid())
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id")
   code           String
   name           String
   type           String
   subtype        String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   journalLines   JournalLine[]
+
+  @@map("accounts")
 }
 
 model JournalEntry {
-  id              String   @id @default(uuid())
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  organizationId  String
-  description     String?
-  posted          Boolean  @default(false)
-  postedAt        DateTime?
-  postingUserId   String?
-  idempotencyKey  String?   @unique
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  lines           JournalLine[]
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id")
+  description    String?
+  posted         Boolean       @default(false)
+  postedAt       DateTime?     @map("posted_at")
+  postingUserId  String?       @map("posting_user_id")
+  idempotencyKey String?       @unique @map("idempotency_key")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines          JournalLine[]
+
+  @@map("journal_entries")
 }
 
 model JournalLine {
-  id            String  @id @default(uuid())
-  journalEntry  JournalEntry @relation(fields: [journalEntryId], references: [id])
-  journalEntryId String
-  account       Account @relation(fields: [accountId], references: [id])
-  accountId     String
+  id            String       @id @default(uuid()) @db.Uuid
+  journalEntryId String      @map("journal_entry_id")
+  accountId     String       @map("account_id")
   description   String?
-  amount        Decimal @db.Decimal(20,6)
-  isDebit       Boolean
+  amount        Decimal      @db.Decimal(20, 6)
+  isDebit       Boolean      @map("is_debit")
+
+  journalEntry  JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account       Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@map("journal_lines")
 }
 
 model FiscalYear {
-  id             String   @id @default(uuid())
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String
-  startDate      DateTime
-  endDate        DateTime
-  createdAt      DateTime @default(now())
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id")
+  startDate      DateTime          @map("start_date")
+  endDate        DateTime          @map("end_date")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   accountingPeriods AccountingPeriod[]
+
+  @@map("fiscal_years")
 }
 
 model AccountingPeriod {
-  id             String   @id @default(uuid())
-  fiscalYear     FiscalYear @relation(fields: [fiscalYearId], references: [id])
-  fiscalYearId   String
-  startDate      DateTime
-  endDate        DateTime
-  isClosed       Boolean  @default(false)
+  id             String      @id @default(uuid()) @db.Uuid
+  fiscalYearId   String      @map("fiscal_year_id")
+  startDate      DateTime    @map("start_date")
+  endDate        DateTime    @map("end_date")
+  isClosed       Boolean     @default(false) @map("is_closed")
+
+  fiscalYear     FiscalYear  @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+
+  @@map("accounting_periods")
 }
 
 model AuditEvent {
-  id             String   @id @default(uuid())
-  organizationId String
-  actorId        String?
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @map("organization_id")
+  actorId        String?   @map("actor_id")
   action         String
-  resourceType   String
-  resourceId     String
-  previousState  Json?
-  newState       Json?
-  createdAt      DateTime @default(now())
+  resourceType   String    @map("resource_type")
+  resourceId     String    @map("resource_id")
+  previousState  Json?     @map("previous_state")
+  newState       Json?     @map("new_state")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("audit_events")
 }
 
 model OrganizationInvitation {
-  id             String   @id @default(uuid())
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id")
   email          String
-  token          String   @unique
+  token          String       @unique
   role           String
-  createdAt      DateTime @default(now())
-  expiresAt      DateTime?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  expiresAt      DateTime?    @map("expires_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_invitations")
+}
+
+model BankAccount {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @map("organization_id")
+  provider       String?
+  name           String
+  accountNumber  String?               @map("account_number")
+  currency       String?
+  createdAt      DateTime              @default(now()) @map("created_at")
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transactions   BankTransaction[]     @relation("BankAccountTransactions")
+  reconciliationSessions ReconciliationSession[] @relation("BankAccountReconciliationSessions")
+
+  @@map("bank_accounts")
+}
+
+model BankTransaction {
+  id             String                 @id @default(uuid()) @db.Uuid
+  bankAccountId  String                 @map("bank_account_id")
+  importedAt     DateTime               @default(now()) @map("imported_at")
+  transactionDate DateTime              @map("transaction_date")
+  amount         Decimal                @db.Decimal(20, 6)
+  description    String?
+  externalId     String?                @map("external_id")
+  importedFile   String?                @map("imported_file")
+  isCleared      Boolean                @default(false) @map("is_cleared")
+
+  bankAccount    BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade, name: "BankAccountTransactions")
+  reconciliationItems ReconciliationItem[] @relation("BankTransactionReconciliationItems")
+
+  @@map("bank_transactions")
+}
+
+model ReconciliationSession {
+  id             String                 @id @default(uuid()) @db.Uuid
+  organizationId String                 @map("organization_id")
+  bankAccountId  String                 @map("bank_account_id")
+  startDate      DateTime               @map("start_date")
+  endDate        DateTime               @map("end_date")
+  status         String                 @default("open")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  closedAt       DateTime?              @map("closed_at")
+
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount    BankAccount            @relation(fields: [bankAccountId], references: [id], onDelete: Cascade, name: "BankAccountReconciliationSessions")
+  items          ReconciliationItem[]   @relation("ReconciliationSessionItems")
+
+  @@map("reconciliation_sessions")
+}
+
+model ReconciliationItem {
+  id                  String               @id @default(uuid()) @db.Uuid
+  sessionId           String               @map("session_id")
+  bankTransactionId   String               @map("bank_transaction_id")
+  matched             Boolean              @default(false)
+  matchedToJournalLineId String?            @map("matched_to_journal_line_id")
+
+  session             ReconciliationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, name: "ReconciliationSessionItems")
+  bankTransaction     BankTransaction      @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade, name: "BankTransactionReconciliationItems")
+
+  @@unique([bankTransactionId])
+  @@map("reconciliation_items")
 }
