@@ -26,6 +26,9 @@ model Organization {
   orgType        String?                 @default("business") @map("org_type")
   industry       String?
   parentOrganizationId String?           @map("parent_organization_id") @db.Uuid
+  planId         String                  @default("free") @map("plan_id")
+  billingCycle   String                  @default("monthly") @map("billing_cycle")
+  addOns         String[]                @default([]) @map("add_ons")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
   memberships    OrganizationMembership[]
@@ -49,6 +52,7 @@ model Organization {
   budgets        Budget[]
   employees      Employee[]
   payRuns        PayRun[]
+  subscriptionEvents SubscriptionEvent[]
 
   parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
   childOrganizations   Organization[] @relation("OrganizationHierarchy")
@@ -554,15 +558,18 @@ model Employee {
 }
 
 model PayRun {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @map("organization_id")
-  payPeriodStart DateTime  @map("pay_period_start")
-  payPeriodEnd   DateTime  @map("pay_period_end")
-  status         String    @default("draft")
-  totalGross     Decimal   @default(0) @db.Decimal(20, 6) @map("total_gross")
-  journalEntryId String?   @unique @map("journal_entry_id")
-  postedAt       DateTime? @map("posted_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  payPeriodStart   DateTime  @map("pay_period_start")
+  payPeriodEnd     DateTime  @map("pay_period_end")
+  status           String    @default("draft")
+  totalGross       Decimal   @default(0) @db.Decimal(20, 6) @map("total_gross")
+  totalEmployeeTax Decimal   @default(0) @db.Decimal(20, 6) @map("total_employee_tax")
+  totalEmployerTax Decimal   @default(0) @db.Decimal(20, 6) @map("total_employer_tax")
+  totalNetPay      Decimal   @default(0) @db.Decimal(20, 6) @map("total_net_pay")
+  journalEntryId   String?   @unique @map("journal_entry_id")
+  postedAt         DateTime? @map("posted_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lines          PayRunLine[]
@@ -575,6 +582,8 @@ model PayRunLine {
   payRunId    String   @map("pay_run_id")
   employeeId  String   @map("employee_id")
   grossPay    Decimal  @db.Decimal(20, 6) @map("gross_pay")
+  employeeTax Decimal  @default(0) @db.Decimal(20, 6) @map("employee_tax")
+  netPay      Decimal  @default(0) @db.Decimal(20, 6) @map("net_pay")
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -582,5 +591,42 @@ model PayRunLine {
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@map("pay_run_lines")
+}
+
+/// Records every plan/billing-cycle/add-on change for an organization.
+/// Plan and feature entitlements themselves are defined in src/lib/plans.ts,
+/// not in the database — this table is only a change history/audit trail.
+model SubscriptionEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id")
+  planId         String   @map("plan_id")
+  billingCycle   String   @map("billing_cycle")
+  addOns         String[] @default([]) @map("add_ons")
+  actorId        String?  @map("actor_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("subscription_events")
+}
+
+/// Submissions from the public /contact-sales marketing form.
+model ContactSalesSubmission {
+  id                 String   @id @default(uuid()) @db.Uuid
+  firstName          String   @map("first_name")
+  lastName           String   @map("last_name")
+  email              String
+  phone              String?
+  organizationName   String   @map("organization_name")
+  organizationType   String?  @map("organization_type")
+  employeeCount      String?  @map("employee_count")
+  currentSystem      String?  @map("current_system")
+  requiredModules    String[] @default([]) @map("required_modules")
+  preferredContact   String?  @map("preferred_contact")
+  message             String?
+  consentAcknowledged Boolean @default(false) @map("consent_acknowledged")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@map("contact_sales_submissions")
 }
 

@@ -25,6 +25,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: m.organizationId,
       name: m.organization.name,
       role: m.role,
+      planId: m.organization.planId,
+      billingCycle: m.organization.billingCycle,
+      addOns: m.organization.addOns,
     })),
   })
 }

@@ -6,10 +6,12 @@ import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Vendor = { id: string; name: string }
 type Account = { id: string; code: string; name: string; type: string }
-type LineForm = { description: string; quantity: string; unitPrice: string; accountId: string }
+type TaxRate = { id: string; name: string; rate: string; isDefault: boolean }
+type ProductOption = { id: string; name: string; costPrice: string | null; expenseAccountId: string; active: boolean }
+type LineForm = { description: string; quantity: string; unitPrice: string; accountId: string; productId: string }
 
 function emptyLine(): LineForm {
-  return { description: '', quantity: '1', unitPrice: '', accountId: '' }
+  return { description: '', quantity: '1', unitPrice: '', accountId: '', productId: '' }
 }
 
 function NewBillContent() {
@@ -17,7 +19,10 @@ function NewBillContent() {
   const { token, currentOrg } = useAuth()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([])
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
   const [vendorId, setVendorId] = useState('')
+  const [taxRateId, setTaxRateId] = useState('')
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
   const [lines, setLines] = useState<LineForm[]>([emptyLine()])
@@ -41,11 +46,36 @@ function NewBillContent() {
           setLines((prev) => prev.map((l) => (l.accountId ? l : { ...l, accountId: expense[0].id })))
         }
       })
+    fetch(`/api/tax-rates?organizationId=${currentOrg.id}`, { headers: authHeaders(token) })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rates: TaxRate[]) => {
+        setTaxRates(rates)
+        const def = rates.find((r) => r.isDefault)
+        if (def) setTaxRateId(def.id)
+      })
+    fetch(`/api/products?organizationId=${currentOrg.id}`, { headers: authHeaders(token) })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((p: ProductOption[]) => setProducts(p.filter((prod) => prod.active)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id])
 
   function updateLine(index: number, patch: Partial<LineForm>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
+  }
+
+  function selectProduct(index: number, productId: string) {
+    if (!productId) {
+      updateLine(index, { productId: '' })
+      return
+    }
+    const product = products.find((p) => p.id === productId)
+    if (!product) return
+    updateLine(index, {
+      productId: product.id,
+      description: product.name,
+      unitPrice: product.costPrice || '',
+      accountId: product.expenseAccountId,
+    })
   }
 
   function addLine() {
@@ -85,11 +115,13 @@ function NewBillContent() {
           vendorId,
           issueDate,
           dueDate,
+          taxRateId: taxRateId || undefined,
           lines: lines.map((l) => ({
             description: l.description,
             quantity: l.quantity,
             unitPrice: l.unitPrice,
             accountId: l.accountId,
+            productId: l.productId || undefined,
           })),
         }),
       })
@@ -158,11 +190,36 @@ function NewBillContent() {
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Tax rate (optional)</label>
+              <select
+                value={taxRateId}
+                onChange={(e) => setTaxRateId(e.target.value)}
+                className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+              >
+                <option value="">None</option>
+                {taxRates.map((r) => <option key={r.id} value={r.id}>{r.name} ({(Number(r.rate) * 100).toFixed(2)}%)</option>)}
+              </select>
+            </div>
+          </div>
+
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Line items</h2>
           <div className="space-y-3 mb-3">
             {lines.map((l, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-5">
+                <div className="col-span-3">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Product (optional)</label>
+                  <select
+                    value={l.productId}
+                    onChange={(e) => selectProduct(i, e.target.value)}
+                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">None</option>
+                    {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-3">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Description</label>
                   <input
                     value={l.description}
@@ -170,7 +227,7 @@ function NewBillContent() {
                     className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
                   />
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Qty</label>
                   <input
                     value={l.quantity}

@@ -31,7 +31,7 @@ export default function RegisterPage() {
       setError(result.error || 'Could not create your account')
       return
     }
-    router.push('/onboarding')
+    router.push({ pathname: '/onboarding', query: router.query })
   }
 
   return (

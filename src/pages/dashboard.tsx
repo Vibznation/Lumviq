@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../lib/auth-context'
+import { resolveEntitlements, hasFeature, hasAddOn } from '../lib/entitlements'
+import { getPlan } from '../lib/plans'
 
 type Summary = {
   cash: number
@@ -12,6 +14,7 @@ type Summary = {
   journalEntryCount: number
   openPeriods: number
   accountsReceivable: number
+  accountsPayable: number
 }
 
 function currency(n: number) {
@@ -23,6 +26,20 @@ function DashboardContent() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const entitlements = useMemo(() => {
+    if (!currentOrg) return null
+    return resolveEntitlements({
+      planId: currentOrg.planId,
+      billingCycle: currentOrg.billingCycle,
+      addOns: currentOrg.addOns,
+    })
+  }, [currentOrg])
+
+  const planName = currentOrg ? getPlan(currentOrg.planId).name : null
+  const hasPayroll = entitlements
+    ? ['payroll-start', 'payroll-complete', 'payroll-complete-hr'].some((id) => hasAddOn(entitlements, id))
+    : false
 
   useEffect(() => {
     if (!currentOrg) return
@@ -39,9 +56,21 @@ function DashboardContent() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Overview</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Overview</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
+        </div>
+        {planName && (
+          <div className="text-right text-sm shrink-0">
+            <span className="inline-block rounded-full bg-teal-50 dark:bg-midnight-800 text-teal-700 dark:text-teal-300 px-3 py-1 font-medium">
+              {planName}
+            </span>
+            <Link href="/settings/billing" className="block mt-1 text-teal-700 dark:text-teal-400 hover:underline">
+              Manage plan →
+            </Link>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -64,6 +93,7 @@ function DashboardContent() {
               tone={summary.netIncome >= 0 ? 'positive' : 'negative'}
             />
             <Card label="Outstanding to collect" value={currency(summary.accountsReceivable)} />
+            <Card label="Outstanding to pay" value={currency(summary.accountsPayable)} />
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
@@ -95,18 +125,105 @@ function DashboardContent() {
                 Import bank transactions and reconcile accounts against posted entries.
               </p>
               <div className="mt-3 flex gap-4 text-sm">
-                <Link href="/banking/import" className="text-teal-700 dark:text-teal-400 hover:underline">Import CSV →</Link>
-                <Link href="/banking/reconcile" className="text-teal-700 dark:text-teal-400 hover:underline">Reconcile →</Link>
+                <ModuleLink href="/banking/import" locked={entitlements ? !hasFeature(entitlements, 'accounting.bank-reconciliation') : false}>
+                  Import CSV →
+                </ModuleLink>
+                <ModuleLink href="/banking/reconcile" locked={entitlements ? !hasFeature(entitlements, 'accounting.bank-reconciliation') : false}>
+                  Reconcile →
+                </ModuleLink>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Purchasing</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Enter bills, track vendors and pay what's owed.
+              </p>
+              <div className="mt-3 flex gap-4 text-sm">
+                <ModuleLink href="/purchasing/bills" locked={entitlements ? !hasFeature(entitlements, 'expenses.bill-management') : false}>
+                  Bills →
+                </ModuleLink>
+                <Link href="/purchasing/vendors" className="text-teal-700 dark:text-teal-400 hover:underline">Vendors →</Link>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Inventory & Projects</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Track products, stock on hand, project time and profitability.
+              </p>
+              <div className="mt-3 flex gap-4 text-sm">
+                <ModuleLink href="/inventory" locked={entitlements ? !hasFeature(entitlements, 'inventory.product-records') : false}>
+                  Inventory →
+                </ModuleLink>
+                <ModuleLink href="/projects" locked={entitlements ? !hasFeature(entitlements, 'projects.time-tracking') : false}>
+                  Projects →
+                </ModuleLink>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Planning & Payroll</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Set budgets, compare against actuals, and record payroll's accounting impact.
+              </p>
+              <div className="mt-3 flex gap-4 text-sm">
+                <ModuleLink href="/planning" locked={entitlements ? !hasFeature(entitlements, 'planning.budgets') : false}>
+                  Budgets →
+                </ModuleLink>
+                <ModuleLink href="/payroll" locked={!hasPayroll} lockedLabel="Add-on required">
+                  Payroll →
+                </ModuleLink>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Reports & Intelligence</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Trial balance, P&L, balance sheet, aging, tax summary and rule-based insights.
+              </p>
+              <div className="mt-3 flex gap-4 text-sm">
+                <Link href="/reports" className="text-teal-700 dark:text-teal-400 hover:underline">Reports →</Link>
+                <Link href="/intelligence" className="text-teal-700 dark:text-teal-400 hover:underline">Intelligence →</Link>
               </div>
             </div>
           </div>
 
           <p className="mt-8 text-xs text-gray-400">
-            Bills, payroll, inventory and forecasting are not implemented yet — see the product roadmap.
+            Live bank feeds, payment processing, OCR, payroll tax filing and direct deposit are not implemented — see Settings → Integrations and the Payroll page for details.
           </p>
         </>
       ) : null}
     </div>
+  )
+}
+
+function ModuleLink({
+  href,
+  locked,
+  lockedLabel,
+  children,
+}: {
+  href: string
+  locked: boolean
+  lockedLabel?: string
+  children: React.ReactNode
+}) {
+  if (locked) {
+    return (
+      <Link
+        href="/pricing"
+        title={lockedLabel ? lockedLabel : 'Upgrade your plan to unlock this'}
+        className="text-gray-400 dark:text-gray-600 hover:underline"
+      >
+        {children} <span className="text-[10px] uppercase tracking-wide">{lockedLabel || 'Upgrade'}</span>
+      </Link>
+    )
+  }
+  return (
+    <Link href={href} className="text-teal-700 dark:text-teal-400 hover:underline">
+      {children}
+    </Link>
   )
 }
 

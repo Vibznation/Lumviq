@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { useRouter } from 'next/router'
 import { brand } from '../lib/brand'
 import { authHeaders, useAuth } from '../lib/auth-context'
+import { PLANS } from '../lib/plans'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -11,6 +12,11 @@ export default function OnboardingPage() {
   const [industry, setIndustry] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const planId = typeof router.query.plan === 'string' ? router.query.plan : 'free'
+  const billingCycle = router.query.billing === 'annual' ? 'annual' : 'monthly'
+  const addOns = typeof router.query.addons === 'string' && router.query.addons.length > 0 ? router.query.addons.split(',') : []
+  const selectedPlan = PLANS.find((p) => p.id === planId)
 
   if (!loading && !token) {
     if (typeof window !== 'undefined') router.replace('/login')
@@ -30,7 +36,7 @@ export default function OnboardingPage() {
       const res = await fetch('/api/orgs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-        body: JSON.stringify({ name, orgType, industry: industry || undefined }),
+        body: JSON.stringify({ name, orgType, industry: industry || undefined, planId, billingCycle, addOns }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -54,6 +60,11 @@ export default function OnboardingPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             {brand.name} will generate a starting chart of accounts and the current fiscal year for you.
           </p>
+          {selectedPlan && (
+            <p className="text-xs text-teal-700 dark:text-teal-400 mt-2">
+              Starting on {selectedPlan.name} ({billingCycle}). <a href="/pricing" className="underline">Change plan</a>
+            </p>
+          )}
         </div>
         <form onSubmit={handleSubmit} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-6 space-y-4">
           {error && (

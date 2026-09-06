@@ -4,6 +4,9 @@ export type OrgSummary = {
   id: string
   name: string
   role: string
+  planId: string
+  billingCycle: string
+  addOns: string[]
 }
 
 export type CurrentUser = {

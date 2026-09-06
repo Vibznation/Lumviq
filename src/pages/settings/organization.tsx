@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
@@ -68,7 +69,14 @@ function OrganizationSettingsContent() {
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Organization settings</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{currentOrg?.name}</p>
+
+      <div className="mb-6 flex gap-4 text-sm">
+        <Link href="/settings/multi-entity" className="text-teal-700 dark:text-teal-400 hover:underline">Multi-entity management</Link>
+        <Link href="/settings/tax-rates" className="text-teal-700 dark:text-teal-400 hover:underline">Tax rates</Link>
+        <Link href="/settings/integrations" className="text-teal-700 dark:text-teal-400 hover:underline">Integrations</Link>
+        <Link href="/settings/billing" className="text-teal-700 dark:text-teal-400 hover:underline">Billing</Link>
+      </div>
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

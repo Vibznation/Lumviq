@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const expenses = totals.expense
   const netIncome = revenue - expenses
 
-  const [accountCount, journalEntryCount, unclosedPeriods, outstandingInvoices] = await Promise.all([
+  const [accountCount, journalEntryCount, unclosedPeriods, outstandingInvoices, outstandingBills] = await Promise.all([
     prisma.account.count({ where: { organizationId } }),
     prisma.journalEntry.count({ where: { organizationId, posted: true } }),
     prisma.accountingPeriod.count({ where: { fiscalYear: { organizationId }, isClosed: false } }),
@@ -52,10 +52,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       where: { organizationId, status: { in: ['sent', 'partially_paid'] } },
       select: { total: true, amountPaid: true },
     }),
+    prisma.bill.findMany({
+      where: { organizationId, status: { in: ['open', 'partially_paid'] } },
+      select: { total: true, amountPaid: true },
+    }),
   ])
 
   const accountsReceivable = outstandingInvoices.reduce(
     (sum, inv) => sum + (Number(inv.total) - Number(inv.amountPaid)),
+    0
+  )
+  const accountsPayable = outstandingBills.reduce(
+    (sum, bill) => sum + (Number(bill.total) - Number(bill.amountPaid)),
     0
   )
 
@@ -68,5 +76,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     journalEntryCount,
     openPeriods: unclosedPeriods,
     accountsReceivable,
+    accountsPayable,
   })
 }
