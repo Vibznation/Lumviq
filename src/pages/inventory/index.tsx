@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string; subtype: string | null }
+type Location = { id: string; name: string; address: string | null }
 type Product = {
   id: string
   sku: string | null
@@ -34,20 +36,26 @@ function InventoryContent() {
   const [adjusting, setAdjusting] = useState<string | null>(null)
   const [adjustQty, setAdjustQty] = useState('')
   const [adjustNote, setAdjustNote] = useState('')
+  const [locations, setLocations] = useState<Location[]>([])
+  const [showLocationForm, setShowLocationForm] = useState(false)
+  const [locationForm, setLocationForm] = useState({ name: '', address: '' })
+  const [submittingLocation, setSubmittingLocation] = useState(false)
 
   async function load() {
     if (!currentOrg) return
     setLoading(true)
     setError(null)
     try {
-      const [pRes, aRes] = await Promise.all([
+      const [pRes, aRes, lRes] = await Promise.all([
         fetch(`/api/products?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
         fetch(`/api/accounts?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+        fetch(`/api/locations?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
       ])
       if (!pRes.ok) throw new Error('Could not load products')
       setProducts(await pRes.json())
       const accs = aRes.ok ? await aRes.json() : []
       setAccounts(accs)
+      setLocations(lRes.ok ? await lRes.json() : [])
       const income = accs.find((a: Account) => a.type === 'income')
       const expense = accs.find((a: Account) => a.type === 'expense')
       const assetAcc = accs.find((a: Account) => a.subtype === 'inventory')
@@ -115,6 +123,31 @@ function InventoryContent() {
     }
   }
 
+  async function handleCreateLocation(e: React.FormEvent) {
+    e.preventDefault()
+    if (!currentOrg) return
+    setSubmittingLocation(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ organizationId: currentOrg.id, ...locationForm }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not create location')
+      }
+      setLocationForm({ name: '', address: '' })
+      setShowLocationForm(false)
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSubmittingLocation(false)
+    }
+  }
+
   const incomeAccounts = accounts.filter((a) => a.type === 'income')
   const expenseAccounts = accounts.filter((a) => a.type === 'expense')
   const assetAccounts = accounts.filter((a) => a.type === 'asset')
@@ -126,12 +159,17 @@ function InventoryContent() {
           <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Products & Inventory</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name} — average cost valuation</p>
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
-        >
-          {showForm ? 'Cancel' : 'New product'}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link href="/reports?tab=Product+Profitability" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Product profitability →
+          </Link>
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
+          >
+            {showForm ? 'Cancel' : 'New product'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -264,6 +302,51 @@ function InventoryContent() {
           </table>
         </div>
       )}
+
+      <div className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Locations</h2>
+          <button onClick={() => setShowLocationForm((s) => !s)} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+            {showLocationForm ? 'Cancel' : '+ New location'}
+          </button>
+        </div>
+        {showLocationForm && (
+          <form onSubmit={handleCreateLocation} className="mb-4 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 grid grid-cols-2 gap-3 max-w-lg">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Name</label>
+              <input required value={locationForm.name} onChange={(e) => setLocationForm((f) => ({ ...f, name: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Address (optional)</label>
+              <input value={locationForm.address} onChange={(e) => setLocationForm((f) => ({ ...f, address: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+            </div>
+            <div className="col-span-2">
+              <button type="submit" disabled={submittingLocation} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+                {submittingLocation ? 'Saving…' : 'Save location'}
+              </button>
+            </div>
+          </form>
+        )}
+        {locations.length === 0 ? (
+          <p className="text-sm text-gray-500">No locations yet — add one to track inventory across warehouses or stores.</p>
+        ) : (
+          <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden max-w-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                <tr><th className="px-4 py-2">Name</th><th className="px-4 py-2">Address</th></tr>
+              </thead>
+              <tbody>
+                {locations.map((l) => (
+                  <tr key={l.id} className="border-t border-gray-100 dark:border-midnight-800">
+                    <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{l.name}</td>
+                    <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{l.address || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
