@@ -31,6 +31,7 @@ model Organization {
   planId         String                  @default("free") @map("plan_id")
   billingCycle   String                  @default("monthly") @map("billing_cycle")
   addOns         String[]                @default([]) @map("add_ons")
+  approvalThresholds Json?               @map("approval_thresholds")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
   memberships    OrganizationMembership[]
@@ -68,6 +69,20 @@ model Organization {
   contractors    Contractor[]
   aiInteractions AiInteraction[]
   webhooks       Webhook[]
+  estimates      Estimate[]
+  purchaseOrders PurchaseOrder[]
+  recurringTemplates RecurringTemplate[]
+  vendorCredits  VendorCredit[]
+  reimbursements Reimbursement[]
+  locations      Location[]
+  projectAssignments ProjectAssignment[]
+  donations      Donation[]
+  pledges        Pledge[]
+  customFields   CustomField[]
+  workflowRules  WorkflowRule[]
+  kpiDefinitions KpiDefinition[]
+  budgetScenarios BudgetScenario[]
+  supportTickets SupportTicket[]
 
   parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
   childOrganizations   Organization[] @relation("OrganizationHierarchy")
@@ -148,10 +163,12 @@ model JournalEntry {
   postedAt       DateTime?     @map("posted_at")
   postingUserId  String?       @map("posting_user_id")
   idempotencyKey String?       @unique @map("idempotency_key")
+  fundId         String?       @map("fund_id")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fund           Fund?         @relation(fields: [fundId], references: [id], onDelete: SetNull)
   lines          JournalLine[]
 
   @@map("journal_entries")
@@ -238,6 +255,7 @@ model Customer {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoices       Invoice[]
+  estimates      Estimate[]
 
   @@map("customers")
 }
@@ -383,6 +401,8 @@ model Vendor {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bills          Bill[]
   contractors    Contractor[]
+  purchaseOrders PurchaseOrder[]
+  vendorCredits  VendorCredit[]
 
   @@map("vendors")
 }
@@ -493,6 +513,7 @@ model StockMovement {
   id             String    @id @default(uuid()) @db.Uuid
   organizationId String    @map("organization_id")
   productId      String    @map("product_id")
+  locationId     String?   @map("location_id")
   type           String
   quantity       Decimal   @db.Decimal(20, 6)
   unitCost       Decimal   @db.Decimal(20, 6) @map("unit_cost")
@@ -502,6 +523,7 @@ model StockMovement {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location       Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@map("stock_movements")
 }
@@ -518,6 +540,7 @@ model Project {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   timeEntries    TimeEntry[]
+  assignments    ProjectAssignment[]
 
   @@map("projects")
 }
@@ -757,6 +780,9 @@ model Fund {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   grants         Grant[]
+  journalEntries JournalEntry[]
+  donations      Donation[]
+  pledges        Pledge[]
 
   @@map("funds")
 }
@@ -899,4 +925,321 @@ model WebhookDelivery {
 
   @@map("webhook_deliveries")
 }
+
+/// Sales estimate/quote, convertible to an Invoice once accepted.
+model Estimate {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id")
+  customerId     String        @map("customer_id")
+  estimateNumber String        @map("estimate_number")
+  status         String        @default("draft")
+  issueDate      DateTime      @map("issue_date")
+  expiryDate     DateTime?     @map("expiry_date")
+  currency       String        @default("USD")
+  subtotal       Decimal       @db.Decimal(20, 6)
+  taxRateId      String?       @map("tax_rate_id")
+  taxTotal       Decimal       @default(0) @db.Decimal(20, 6) @map("tax_total")
+  total          Decimal       @db.Decimal(20, 6)
+  convertedInvoiceId String?   @unique @map("converted_invoice_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines          EstimateLine[]
+
+  @@unique([organizationId, estimateNumber])
+  @@map("estimates")
+}
+
+model EstimateLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  estimateId  String   @map("estimate_id")
+  description String
+  quantity    Decimal  @default(1) @db.Decimal(20, 6)
+  unitPrice   Decimal  @db.Decimal(20, 6) @map("unit_price")
+  amount      Decimal  @db.Decimal(20, 6)
+  accountId   String   @map("account_id")
+  productId   String?  @map("product_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  estimate    Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@map("estimate_lines")
+}
+
+/// Purchase order sent to a vendor, convertible to a Bill once received.
+model PurchaseOrder {
+  id             String        @id @default(uuid()) @db.Uuid
+  organizationId String        @map("organization_id")
+  vendorId       String        @map("vendor_id")
+  poNumber       String        @map("po_number")
+  status         String        @default("draft")
+  issueDate      DateTime      @map("issue_date")
+  expectedDate   DateTime?     @map("expected_date")
+  currency       String        @default("USD")
+  subtotal       Decimal       @db.Decimal(20, 6)
+  total          Decimal       @db.Decimal(20, 6)
+  convertedBillId String?      @unique @map("converted_bill_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor         Vendor        @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  lines          PurchaseOrderLine[]
+
+  @@unique([organizationId, poNumber])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id              String        @id @default(uuid()) @db.Uuid
+  purchaseOrderId String        @map("purchase_order_id")
+  description     String
+  quantity        Decimal       @default(1) @db.Decimal(20, 6)
+  unitPrice       Decimal       @db.Decimal(20, 6) @map("unit_price")
+  amount          Decimal       @db.Decimal(20, 6)
+  accountId       String        @map("account_id")
+  productId       String?       @map("product_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_lines")
+}
+
+/// Recurring invoice/bill template. "Run now" (or a future scheduler)
+/// generates a real Invoice/Bill from templateLines against nextRunDate.
+model RecurringTemplate {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  type           String
+  partyId        String    @map("party_id")
+  frequency      String    @default("monthly")
+  nextRunDate    DateTime  @map("next_run_date")
+  lastRunAt      DateTime? @map("last_run_at")
+  active         Boolean   @default(true)
+  taxRateId      String?   @map("tax_rate_id")
+  templateLines  Json      @map("template_lines")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("recurring_templates")
+}
+
+/// Credit memo from a vendor, reducing what the organization owes them.
+model VendorCredit {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  vendorId         String    @map("vendor_id")
+  creditNumber     String    @map("credit_number")
+  amount           Decimal   @db.Decimal(20, 6)
+  remainingAmount  Decimal   @db.Decimal(20, 6) @map("remaining_amount")
+  reason           String?
+  expenseAccountId String    @map("expense_account_id")
+  journalEntryId   String?   @unique @map("journal_entry_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor           Vendor       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, creditNumber])
+  @@map("vendor_credits")
+}
+
+/// Employee/contractor out-of-pocket expense reimbursement request.
+model Reimbursement {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  employeeId       String?   @map("employee_id")
+  payeeName        String    @map("payee_name")
+  amount           Decimal   @db.Decimal(20, 6)
+  description      String?
+  expenseAccountId String    @map("expense_account_id")
+  paymentAccountId String?   @map("payment_account_id")
+  status           String    @default("pending")
+  journalEntryId   String?   @unique @map("journal_entry_id")
+  requestedByUserId String   @map("requested_by_user_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("reimbursements")
+}
+
+/// Physical/warehouse location for multi-location inventory tracking.
+model Location {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  address        String?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+
+  @@map("locations")
+}
+
+/// Staff allocation: which users are assigned to a project and at what
+/// percentage of their time, used for job-costing/staffing reports.
+model ProjectAssignment {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id")
+  projectId         String    @map("project_id")
+  userId            String    @map("user_id")
+  allocationPercent Decimal   @default(100) @db.Decimal(5, 2) @map("allocation_percent")
+  roleLabel         String?   @map("role_label")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_assignments")
+}
+
+/// One-time donation received (nonprofit).
+model Donation {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  donorName      String    @map("donor_name")
+  donorEmail     String?   @map("donor_email")
+  amount         Decimal   @db.Decimal(20, 6)
+  date           DateTime
+  fundId         String?   @map("fund_id")
+  method         String?
+  depositAccountId String  @map("deposit_account_id")
+  journalEntryId String?   @unique @map("journal_entry_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fund           Fund?        @relation(fields: [fundId], references: [id], onDelete: SetNull)
+
+  @@map("donations")
+}
+
+/// A donor's committed future gift (nonprofit); fulfilledAmount tracks
+/// progress as matching Donations are recorded against it.
+model Pledge {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  donorName        String    @map("donor_name")
+  donorEmail       String?   @map("donor_email")
+  amount           Decimal   @db.Decimal(20, 6)
+  pledgeDate       DateTime  @map("pledge_date")
+  dueDate          DateTime? @map("due_date")
+  fulfilledAmount  Decimal   @default(0) @db.Decimal(20, 6) @map("fulfilled_amount")
+  fundId           String?   @map("fund_id")
+  status           String    @default("open")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fund             Fund?        @relation(fields: [fundId], references: [id], onDelete: SetNull)
+
+  @@map("pledges")
+}
+
+/// Organization-defined custom field on a given entity type (e.g.
+/// "customer", "invoice"). Values are stored separately so fields can be
+/// added/removed without a schema migration per field.
+model CustomField {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  entityType     String    @map("entity_type")
+  name           String
+  fieldType      String    @default("text") @map("field_type")
+  options        String[]  @default([])
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  values         CustomFieldValue[]
+
+  @@unique([organizationId, entityType, name])
+  @@map("custom_fields")
+}
+
+model CustomFieldValue {
+  id            String      @id @default(uuid()) @db.Uuid
+  customFieldId String      @map("custom_field_id")
+  entityId      String      @map("entity_id")
+  value         String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([customFieldId, entityId])
+  @@map("custom_field_values")
+}
+
+/// Simple "when X, do Y" automation rule. Evaluated on demand via
+/// POST /api/workflows/run-due (no background scheduler exists yet).
+model WorkflowRule {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  triggerType    String    @map("trigger_type")
+  triggerConfig  Json?     @map("trigger_config")
+  actionType     String    @default("notify") @map("action_type")
+  active         Boolean   @default(true)
+  lastRunAt      DateTime? @map("last_run_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_rules")
+}
+
+/// User-defined KPI: a labeled sum/average over a set of account balances,
+/// surfaced on the executive dashboard.
+model KpiDefinition {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  accountIds     String[]  @default([]) @map("account_ids")
+  operation      String    @default("sum")
+  targetValue    Decimal?  @db.Decimal(20, 6) @map("target_value")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("kpi_definitions")
+}
+
+/// A "what-if" budget scenario: percentage adjustments applied to an
+/// existing budget/actuals baseline for side-by-side comparison.
+model BudgetScenario {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  basedOnActual  Boolean   @default(false) @map("based_on_actual")
+  adjustments    Json
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("budget_scenarios")
+}
+
+/// In-app support ticket. Priority/response-time expectations are derived
+/// from the organization's plan (see src/lib/support.ts) — there is no
+/// live chat or ticketing-system integration.
+model SupportTicket {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  createdByUserId String   @map("created_by_user_id")
+  subject        String
+  message        String
+  status         String    @default("open")
+  priority       String    @default("standard")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("support_tickets")
+}
+
 
