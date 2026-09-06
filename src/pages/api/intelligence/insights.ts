@@ -153,6 +153,115 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   })
 
+  // --- 5. Profit forecast: linear projection of net income from trailing 90-day revenue/expense run-rate ---
+  const recentPnlLines = await prisma.journalLine.findMany({
+    where: {
+      journalEntry: { organizationId, posted: true, postedAt: { gte: ninetyDaysAgo } },
+      account: { type: { in: ['income', 'expense'] } },
+    },
+    include: { account: true },
+  })
+  let recentRevenue = 0
+  let recentExpense = 0
+  for (const line of recentPnlLines) {
+    const amount = Number(line.amount)
+    if (line.account.type === 'income') recentRevenue += line.isDebit ? -amount : amount
+    else recentExpense += line.isDebit ? amount : -amount
+  }
+  const dailyNetIncome = (recentRevenue - recentExpense) / 90
+  const projectedNext30Days = dailyNetIncome * 30
+  insights.push({
+    type: 'profit_forecast',
+    label: 'Profit forecast',
+    severity: 'info',
+    summary: `At the trailing 90-day run rate, net income for the next 30 days is projected to be approximately ${projectedNext30Days.toFixed(2)}.`,
+    basis: {
+      revenueLast90Days: recentRevenue,
+      expensesLast90Days: recentExpense,
+      averageDailyNetIncome: dailyNetIncome,
+      projectedNext30Days,
+      method: 'Linear projection: (revenue - expenses) over the trailing 90 days, divided by 90, multiplied by 30.',
+    },
+  })
+
+  // --- 6. Payment recommendations: which open bills to prioritize paying first, ranked by due date then amount ---
+  const openBills = await prisma.bill.findMany({
+    where: { organizationId, status: { in: ['open', 'partially_paid'] } },
+    include: { vendor: true },
+    orderBy: [{ dueDate: 'asc' }],
+    take: 10,
+  })
+  const paymentRecommendations = openBills.map((b) => ({
+    billNumber: b.billNumber,
+    vendor: b.vendor.name,
+    balance: Number(b.total) - Number(b.amountPaid),
+    dueDate: b.dueDate,
+    overdue: b.dueDate < new Date(),
+  }))
+  insights.push({
+    type: 'payment_recommendations',
+    label: 'Recommended payment order',
+    severity: paymentRecommendations.some((p) => p.overdue) ? 'warning' : 'info',
+    summary:
+      paymentRecommendations.length > 0
+        ? `${paymentRecommendations.length} open bill(s) ranked by due date, earliest first.`
+        : 'No open bills to prioritize.',
+    basis: {
+      recommendations: paymentRecommendations,
+      method: 'Open/partially-paid bills sorted by due date ascending (earliest due first), limited to 10.',
+    },
+  })
+
+  // --- 7. Reconciliation match suggestions: unreconciled bank transactions likely matching an open invoice/bill by amount ---
+  const unreconciled = await prisma.bankTransaction.findMany({
+    where: { bankAccount: { organizationId }, isCleared: false },
+    take: 25,
+  })
+  const openInvoicesForMatch = await prisma.invoice.findMany({
+    where: { organizationId, status: { in: ['sent', 'partially_paid'] } },
+  })
+  const openBillsForMatch = await prisma.bill.findMany({
+    where: { organizationId, status: { in: ['open', 'partially_paid'] } },
+  })
+  const reconciliationSuggestions: any[] = []
+  for (const txn of unreconciled) {
+    const amount = Math.abs(Number(txn.amount))
+    const invoiceMatch = openInvoicesForMatch.find((inv) => Math.abs(Number(inv.total) - Number(inv.amountPaid) - amount) < 0.01)
+    const billMatch = openBillsForMatch.find((b) => Math.abs(Number(b.total) - Number(b.amountPaid) - amount) < 0.01)
+    if (invoiceMatch) {
+      reconciliationSuggestions.push({ bankTransactionId: txn.id, description: txn.description, amount, matchType: 'invoice', matchNumber: invoiceMatch.invoiceNumber })
+    } else if (billMatch) {
+      reconciliationSuggestions.push({ bankTransactionId: txn.id, description: txn.description, amount, matchType: 'bill', matchNumber: billMatch.billNumber })
+    }
+  }
+  insights.push({
+    type: 'reconciliation_suggestions',
+    label: 'Reconciliation match suggestions',
+    severity: 'info',
+    summary:
+      reconciliationSuggestions.length > 0
+        ? `${reconciliationSuggestions.length} unreconciled bank transaction(s) match an open invoice or bill by exact outstanding amount.`
+        : 'No exact-amount matches found among unreconciled bank transactions.',
+    basis: {
+      suggestions: reconciliationSuggestions,
+      method: 'Exact-amount match (within $0.01) between an unreconciled bank transaction and the outstanding balance of an open invoice or bill.',
+    },
+  })
+
+  // --- 8. Management summary: narrative rollup of the above, for board/executive reporting ---
+  insights.push({
+    type: 'management_summary',
+    label: 'Management summary',
+    severity: 'info',
+    summary: `Cash on hand is ${currentCash.toFixed(2)}. ${overdueInvoices.length} invoice(s) totaling ${overdueTotal.toFixed(2)} are overdue. Projected 30-day net income is ${projectedNext30Days.toFixed(2)}.`,
+    basis: {
+      currentCash,
+      overdueReceivablesTotal: overdueTotal,
+      projectedNext30DaysNetIncome: projectedNext30Days,
+      method: 'Narrative rollup composed directly from the cash_forecast, overdue_receivables and profit_forecast insights computed above; no new calculation.',
+    },
+  })
+
   // Log every computation for audit purposes (see prompt.md's AI
   // INTELLIGENCE requirement to log suggestions/insights). This is a log
   // of a deterministic calculation, not a model interaction.

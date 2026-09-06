@@ -376,6 +376,98 @@ export function cheapestPlanForFeature(featureKey: string): Plan | null {
   return PLANS.find((p) => p.featureKeys.includes(featureKey)) || null
 }
 
+/**
+ * Maps each FEATURE_CATALOG key to the in-app page that implements it, so
+ * marketing pages (features, pricing) can link straight to real,
+ * functional screens instead of only describing the capability. A
+ * feature with no dedicated screen yet (still on the roadmap) is
+ * intentionally omitted rather than pointed at an unrelated page — see
+ * docs/roadmap.md for what remains.
+ */
+export const FEATURE_LINKS: Record<string, string> = {
+  'accounting.income-expense-tracking': '/accounting/chart-of-accounts',
+  'accounting.double-entry-ledger': '/accounting/chart-of-accounts',
+  'accounting.chart-of-accounts': '/accounting/chart-of-accounts',
+  'accounting.bank-reconciliation': '/banking/reconcile',
+  'accounting.receipt-matching': '/banking/reconcile',
+  'accounting.recurring-transactions': '/sales/recurring',
+  'accounting.audit-trail': '/settings/audit-log',
+
+  'sales.estimates': '/sales/estimates',
+  'sales.invoices': '/sales/invoices',
+  'sales.recurring-invoices': '/sales/recurring',
+  'sales.progress-invoicing': '/projects',
+  'sales.customer-statements': '/reports?tab=Customer+Statements',
+  'sales.payment-reminders': '/settings/workflows',
+  'sales.sales-tax-tracking': '/settings/tax-rates',
+  'sales.multi-currency-invoices': '/settings/currencies',
+
+  'expenses.bill-management': '/purchasing/bills',
+  'expenses.recurring-bills': '/sales/recurring',
+  'expenses.vendor-credits': '/purchasing/vendor-credits',
+  'expenses.purchase-orders': '/purchasing/purchase-orders',
+  'expenses.expense-reimbursements': '/purchasing/reimbursements',
+  'expenses.approval-workflows': '/approvals',
+  'expenses.ap-reporting': '/reports?tab=AP+Aging',
+
+  'projects.time-tracking': '/projects',
+  'projects.billable-time': '/projects',
+  'projects.project-expenses': '/projects',
+  'projects.project-budgets': '/planning',
+  'projects.job-costing': '/reports?tab=Job+Costing',
+  'projects.project-profitability': '/reports?tab=Job+Costing',
+  'projects.staff-allocation': '/projects',
+
+  'inventory.product-records': '/inventory',
+  'inventory.inventory-quantities': '/inventory',
+  'inventory.purchase-receipts': '/purchasing/purchase-orders',
+  'inventory.reorder-alerts': '/inventory',
+  'inventory.multiple-locations': '/inventory',
+  'inventory.inventory-valuation': '/reports?tab=Inventory+Valuation',
+  'inventory.product-profitability': '/reports?tab=Product+Profitability',
+
+  'planning.budgets': '/planning',
+  'planning.budget-vs-actual': '/planning',
+  'planning.scenario-planning': '/planning?tab=Scenarios',
+  'planning.custom-kpis': '/planning?tab=KPIs+%2F+Executive+dashboard',
+  'planning.executive-dashboards': '/planning?tab=KPIs+%2F+Executive+dashboard',
+
+  'nonprofit.fund-accounting': '/settings/funds',
+  'nonprofit.restricted-funds': '/settings/funds',
+  'nonprofit.grants': '/settings/funds',
+  'nonprofit.programs': '/settings/dimensions',
+  'nonprofit.donations': '/settings/funds',
+  'nonprofit.pledges': '/settings/funds',
+  'nonprofit.board-reports': '/reports',
+
+  'team.users': '/settings/organization',
+  'team.accountant-access': '/accountants',
+  'team.custom-roles': '/settings/roles',
+  'team.approval-limits': '/settings/approval-thresholds',
+  'team.audit-history': '/settings/audit-log',
+  'team.dimension-tracking': '/settings/dimensions',
+  'team.custom-fields': '/settings/custom-fields',
+  'team.workflow-automation': '/settings/workflows',
+
+  'intelligence.ai-chat': '/intelligence?tab=Chat',
+  'intelligence.reconciliation-suggestions': '/banking/reconcile',
+  'intelligence.anomaly-detection': '/intelligence',
+  'intelligence.payment-recommendations': '/intelligence',
+  'intelligence.cash-flow-insights': '/intelligence',
+  'intelligence.management-summaries': '/intelligence',
+
+  'support.community': '/support',
+  'support.standard': '/support',
+  'support.priority': '/support',
+  'support.guided-onboarding': '/onboarding',
+  'support.dedicated-account-management': '/support',
+}
+
+/** In-app page implementing a feature, or null if it has no dedicated screen yet. */
+export function featureLink(featureKey: string): string | null {
+  return FEATURE_LINKS[featureKey] || null
+}
+
 /** Renewal/charged price for a plan at a given billing cycle. Null = contact sales. */
 export function planPrice(planId: string, cycle: BillingCycle): number | null {
   const plan = getPlan(planId)
