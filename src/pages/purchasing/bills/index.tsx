@@ -59,6 +59,12 @@ function BillsContent() {
           <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/purchasing/purchase-orders" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Purchase orders →
+          </Link>
+          <Link href="/sales/recurring" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Recurring →
+          </Link>
           <Link href="/purchasing/vendors" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
             Vendors →
           </Link>

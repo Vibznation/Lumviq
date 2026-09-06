@@ -1,0 +1,136 @@
+import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
+import ProtectedRoute from '../../../components/ProtectedRoute'
+import { authHeaders, useAuth } from '../../../lib/auth-context'
+
+type Estimate = { id: string; estimateNumber: string; status: string; total: string; expiryDate: string | null; customer: { name: string } }
+
+function currency(n: string | number) {
+  return Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-700 dark:bg-midnight-800 dark:text-gray-300',
+  sent: 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+  accepted: 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300',
+  declined: 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
+}
+
+function EstimatesContent() {
+  const { token, currentOrg } = useAuth()
+  const [estimates, setEstimates] = useState<Estimate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [converting, setConverting] = useState<string | null>(null)
+
+  async function load() {
+    if (!currentOrg) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/estimates?organizationId=${currentOrg.id}`, { headers: authHeaders(token) })
+      if (!res.ok) throw new Error('Could not load estimates')
+      setEstimates(await res.json())
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id])
+
+  async function handleConvert(id: string) {
+    setConverting(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/estimates/${id}/convert`, { method: 'POST', headers: authHeaders(token) })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not convert estimate')
+      }
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setConverting(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Estimates</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/sales/invoices" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Invoices →
+          </Link>
+          <Link href="/sales/estimates/new" className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
+            New estimate
+          </Link>
+        </div>
+      </div>
+
+      {error && (
+        <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : estimates.length === 0 ? (
+        <p className="text-sm text-gray-500">No estimates yet. Create your first estimate to send a quote to a customer.</p>
+      ) : (
+        <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+              <tr>
+                <th className="px-4 py-2">Number</th>
+                <th className="px-4 py-2">Customer</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Expires</th>
+                <th className="px-4 py-2 text-right">Total</th>
+                <th className="px-4 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estimates.map((est) => (
+                <tr key={est.id} className="border-t border-gray-100 dark:border-midnight-800 hover:bg-gray-50 dark:hover:bg-midnight-800">
+                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{est.estimateNumber}</td>
+                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{est.customer?.name}</td>
+                  <td className="px-4 py-2">
+                    <span className={'inline-block rounded-full px-2 py-0.5 text-xs font-medium ' + (STATUS_STYLES[est.status] || '')}>{est.status}</span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{est.expiryDate ? new Date(est.expiryDate).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">{currency(est.total)}</td>
+                  <td className="px-4 py-2 text-right">
+                    {est.status !== 'declined' && est.status !== 'accepted' && (
+                      <button onClick={() => handleConvert(est.id)} disabled={converting === est.id} className="text-xs text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
+                        {converting === est.id ? 'Converting…' : 'Convert to invoice'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function EstimatesPage() {
+  return (
+    <ProtectedRoute>
+      <EstimatesContent />
+    </ProtectedRoute>
+  )
+}
