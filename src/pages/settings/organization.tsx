@@ -81,6 +81,11 @@ function OrganizationSettingsContent() {
         <Link href="/settings/funds" className="text-teal-700 dark:text-teal-400 hover:underline">Funds &amp; grants</Link>
         <Link href="/settings/contractors" className="text-teal-700 dark:text-teal-400 hover:underline">Contractors</Link>
         <Link href="/settings/webhooks" className="text-teal-700 dark:text-teal-400 hover:underline">Webhooks</Link>
+        <Link href="/settings/roles" className="text-teal-700 dark:text-teal-400 hover:underline">Custom roles</Link>
+        <Link href="/settings/custom-fields" className="text-teal-700 dark:text-teal-400 hover:underline">Custom fields</Link>
+        <Link href="/settings/workflows" className="text-teal-700 dark:text-teal-400 hover:underline">Workflow automation</Link>
+        <Link href="/settings/approval-thresholds" className="text-teal-700 dark:text-teal-400 hover:underline">Approval thresholds</Link>
+        <Link href="/settings/audit-log" className="text-teal-700 dark:text-teal-400 hover:underline">Audit history</Link>
       </div>
 
       {error && (

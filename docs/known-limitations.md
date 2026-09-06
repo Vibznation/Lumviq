@@ -126,6 +126,56 @@ explicit scope boundaries so no feature is misrepresented.
   require selecting a fund, so fund balances are not automatically kept
   in sync with the general ledger. There is no statement-of-activities-
   by-fund report yet.
+- Donations post a real ledger deposit (debit the chosen bank account,
+  credit an income account) when recorded; pledges do **not** post
+  anything until fulfilled (`POST /api/pledges/[id]/fulfill`), at which
+  point the fulfilled amount posts the same way a donation does. A
+  pledge's `fundId` is informational only — it is not enforced against
+  a restricted-fund balance.
+
+## Custom roles
+- `Role.name` is **globally unique** across the entire application, not
+  scoped per organization (`src/pages/api/roles/index.ts`) — this is a
+  schema-level limitation, not a UI bug. Two organizations cannot both
+  have a role named e.g. "Manager"; the settings page hints at
+  prefixing role names with the organization name to avoid collisions,
+  but does not enforce it.
+
+## Workflow automation
+- There is **no background scheduler**. Workflow rules (`WorkflowRule`)
+  only evaluate and fire when a user clicks "Run due rules" on
+  `/settings/workflows`, which calls `POST /api/workflows/run-due`
+  (`src/lib/workflows.ts`). Nothing runs on a timer or cron — an
+  external scheduler would need to call that endpoint periodically for
+  fully automatic behavior.
+- Supported triggers are limited to `invoice_overdue`, `bill_due_soon`
+  and `low_stock`; actions are limited to creating a `Notification` or a
+  pending `Approval`.
+
+## Budget scenarios
+- A `BudgetScenario` stores a name and a JSON map of per-account
+  percentage adjustments (`prisma/schema.prisma`), but there is **no
+  compute/apply endpoint** — the app does not project a new budget from
+  a scenario's adjustments today. The Planning page only lets you
+  create and view scenarios; comparing a scenario's projected numbers
+  against actuals is not yet implemented.
+
+## Support tickets
+- `/support` and `POST /api/support-tickets` are an **in-app ticket
+  log** only — there is no live chat, no external help-desk/ticketing
+  system integration, and no route to change a ticket's status after
+  creation (tickets stay `open` until a future admin action is added).
+  The displayed response-time expectation is derived from the
+  organization's plan (`src/lib/support.ts`) and is informational only.
+
+## AI chat
+- `POST /api/intelligence/chat` (surfaced as the Chat tab on
+  `/intelligence`) is, like the Insights tab, a small deterministic
+  keyword router over the organization's own ledger/invoice/bill data —
+  **not** a call to any language model or external AI provider. It only
+  answers a fixed set of recognized questions (cash balance, overdue
+  invoices, upcoming bills, recent profit) and states the calculation
+  method (`basis`) behind every answer.
 
 ## Webhooks
 - Outbound webhook subscriptions can be created and signed

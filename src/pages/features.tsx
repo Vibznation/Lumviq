@@ -2,7 +2,7 @@ import React from 'react'
 import Link from 'next/link'
 import MarketingLayout from '../components/marketing/MarketingLayout'
 import { brand } from '../lib/brand'
-import { FEATURE_CATALOG, FEATURE_CATEGORIES, cheapestPlanForFeature } from '../lib/plans'
+import { FEATURE_CATALOG, FEATURE_CATEGORIES, cheapestPlanForFeature, featureLink } from '../lib/plans'
 
 export default function FeaturesPage() {
   return (
@@ -36,14 +36,29 @@ export default function FeaturesPage() {
               <ul className="mt-6 grid sm:grid-cols-2 gap-3">
                 {catFeatures.map((f) => {
                   const plan = cheapestPlanForFeature(f.key)
+                  const href = featureLink(f.key)
+                  const badge = plan && (
+                    <span className="shrink-0 text-[11px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-midnight-800 rounded-full px-2 py-0.5">
+                      {plan.name}+
+                    </span>
+                  )
+                  if (href) {
+                    return (
+                      <li key={f.key}>
+                        <Link
+                          href={href}
+                          className="rounded-lg border border-gray-200 dark:border-midnight-800 p-4 flex items-start justify-between gap-3 hover:border-teal-400 dark:hover:border-teal-600 hover:bg-teal-50/40 dark:hover:bg-midnight-800 transition-colors"
+                        >
+                          <span className="text-sm text-teal-700 dark:text-teal-400 hover:underline">{f.label} &rarr;</span>
+                          {badge}
+                        </Link>
+                      </li>
+                    )
+                  }
                   return (
                     <li key={f.key} className="rounded-lg border border-gray-200 dark:border-midnight-800 p-4 flex items-start justify-between gap-3">
                       <span className="text-sm text-gray-700 dark:text-gray-300">{f.label}</span>
-                      {plan && (
-                        <span className="shrink-0 text-[11px] font-medium text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-midnight-800 rounded-full px-2 py-0.5">
-                          {plan.name}+
-                        </span>
-                      )}
+                      {badge}
                     </li>
                   )
                 })}

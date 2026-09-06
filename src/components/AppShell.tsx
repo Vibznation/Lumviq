@@ -27,6 +27,7 @@ const NAV_ITEMS: Array<{ label: string; href: string; featureKey?: string; addOn
   { label: 'Intelligence', href: '/intelligence' },
   { label: 'Approvals', href: '/approvals' },
   { label: 'Data', href: '/data/import-export' },
+  { label: 'Support', href: '/support' },
   { label: 'Settings', href: '/settings/organization' },
 ]
 

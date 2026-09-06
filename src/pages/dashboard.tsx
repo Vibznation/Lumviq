@@ -111,10 +111,16 @@ function DashboardContent() {
             <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Sales</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Create invoices, record customer payments and track what's owed.
+                Create estimates and invoices, set up recurring billing, and track what's owed.
               </p>
-              <div className="mt-3 flex gap-4 text-sm">
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
                 <Link href="/sales/invoices" className="text-teal-700 dark:text-teal-400 hover:underline">Invoices →</Link>
+                <ModuleLink href="/sales/estimates" locked={entitlements ? !hasFeature(entitlements, 'sales.estimates') : false}>
+                  Estimates →
+                </ModuleLink>
+                <ModuleLink href="/sales/recurring" locked={entitlements ? !hasFeature(entitlements, 'sales.recurring-invoices') : false}>
+                  Recurring →
+                </ModuleLink>
                 <Link href="/sales/customers" className="text-teal-700 dark:text-teal-400 hover:underline">Customers →</Link>
               </div>
             </div>
@@ -137,11 +143,20 @@ function DashboardContent() {
             <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Purchasing</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Enter bills, track vendors and pay what's owed.
+                Enter bills and purchase orders, track vendors, vendor credits and reimbursements.
               </p>
-              <div className="mt-3 flex gap-4 text-sm">
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
                 <ModuleLink href="/purchasing/bills" locked={entitlements ? !hasFeature(entitlements, 'expenses.bill-management') : false}>
                   Bills →
+                </ModuleLink>
+                <ModuleLink href="/purchasing/purchase-orders" locked={entitlements ? !hasFeature(entitlements, 'expenses.purchase-orders') : false}>
+                  Purchase orders →
+                </ModuleLink>
+                <ModuleLink href="/purchasing/vendor-credits" locked={entitlements ? !hasFeature(entitlements, 'expenses.vendor-credits') : false}>
+                  Vendor credits →
+                </ModuleLink>
+                <ModuleLink href="/purchasing/reimbursements" locked={entitlements ? !hasFeature(entitlements, 'expenses.expense-reimbursements') : false}>
+                  Reimbursements →
                 </ModuleLink>
                 <Link href="/purchasing/vendors" className="text-teal-700 dark:text-teal-400 hover:underline">Vendors →</Link>
               </div>
@@ -180,11 +195,57 @@ function DashboardContent() {
             <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
               <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Reports & Intelligence</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Trial balance, P&L, balance sheet, aging, tax summary and rule-based insights.
+                Trial balance, P&L, balance sheet, aging, tax summary and rule-based insights and chat.
               </p>
               <div className="mt-3 flex gap-4 text-sm">
                 <Link href="/reports" className="text-teal-700 dark:text-teal-400 hover:underline">Reports →</Link>
                 <Link href="/intelligence" className="text-teal-700 dark:text-teal-400 hover:underline">Intelligence →</Link>
+              </div>
+            </div>
+
+            {entitlements && hasFeature(entitlements, 'nonprofit.fund-accounting') && (
+              <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+                <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Nonprofit</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Track restricted funds, grants, donations and pledges.
+                </p>
+                <div className="mt-3 flex gap-4 text-sm">
+                  <Link href="/settings/funds" className="text-teal-700 dark:text-teal-400 hover:underline">Funds & grants →</Link>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Team & Controls</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Custom roles, custom fields, workflow automation, approval limits and audit history.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                <ModuleLink href="/settings/roles" locked={entitlements ? !hasFeature(entitlements, 'team.custom-roles') : false}>
+                  Roles →
+                </ModuleLink>
+                <ModuleLink href="/settings/custom-fields" locked={entitlements ? !hasFeature(entitlements, 'team.custom-fields') : false}>
+                  Custom fields →
+                </ModuleLink>
+                <ModuleLink href="/settings/workflows" locked={entitlements ? !hasFeature(entitlements, 'team.workflow-automation') : false}>
+                  Workflows →
+                </ModuleLink>
+                <ModuleLink href="/settings/approval-thresholds" locked={entitlements ? !hasFeature(entitlements, 'team.approval-limits') : false}>
+                  Approval limits →
+                </ModuleLink>
+                <ModuleLink href="/settings/audit-log" locked={entitlements ? !hasFeature(entitlements, 'team.audit-history') : false}>
+                  Audit history →
+                </ModuleLink>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5">
+              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Support</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Submit a ticket and see your plan's expected response time.
+              </p>
+              <div className="mt-3 flex gap-4 text-sm">
+                <Link href="/support" className="text-teal-700 dark:text-teal-400 hover:underline">Support →</Link>
               </div>
             </div>
           </div>

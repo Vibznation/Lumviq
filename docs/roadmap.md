@@ -50,6 +50,24 @@
   [known-limitations.md](known-limitations.md) for the honest scope
   boundary of each of these, and [verification-report.md](verification-report.md)
   for the commands run to verify this phase.
+- **Phase 6 expansion**: Sales estimates (with convert-to-invoice) and
+  recurring invoice/bill templates; Purchasing purchase orders (with
+  convert-to-bill), vendor credits and expense reimbursements (with an
+  approve/reject/pay decision flow); Project staff allocation and
+  progress invoicing; Inventory multiple locations; three new report
+  tabs (Job Costing, Product Profitability, Customer Statements);
+  Nonprofit donations (auto-posting deposits) and pledges (with a
+  fulfill action); Custom roles with a configurable permission set per
+  role; Custom fields per entity type; Workflow automation (on-demand
+  rule evaluation for overdue invoices, bills due soon, and low stock);
+  configurable per-resource-type Approval thresholds; an Audit history
+  viewer; Budget scenarios (\"what-if\" percentage adjustments) and
+  Custom KPIs / executive dashboard on the Planning page; an AI Chat tab
+  next to Intelligence Insights; and an in-app Support ticket log. See
+  [known-limitations.md](known-limitations.md) for what remains
+  unfinished within each of these (e.g. no background scheduler for
+  Workflow automation, no compute/apply step for Budget scenarios, no
+  ticket-status transitions for Support).
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -79,4 +97,16 @@
   documents, notifications, currency, dimensions, contractors,
   nonprofit, import-export, webhooks).
 - FIFO/LIFO inventory costing options (currently average-cost only).
+- Dedicated unit tests for the Phase 6 domain modules (estimates,
+  purchase orders, vendor credits, reimbursements, recurring templates,
+  roles/permissions, custom fields, workflows, budget scenarios, KPIs,
+  support tickets).
+- A compute/apply step for Budget scenarios that projects a new budget
+  from a scenario's percentage adjustments, rather than only storing
+  them.
+- A background scheduler (or documented external cron pattern) to run
+  Workflow automation rules automatically instead of only on-demand.
+- Ticket-status transitions (e.g. resolve/close) for Support tickets,
+  and per-organization role scoping so custom role names don't collide
+  globally.
 

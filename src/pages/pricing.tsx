@@ -26,6 +26,13 @@ const ADDON_GROUP_LABELS: Record<string, string> = {
   nonprofit: 'Nonprofit Enhanced',
 }
 
+const ADDON_GROUP_LINKS: Record<string, string> = {
+  payroll: '/payroll',
+  payments: '/settings/integrations',
+  commerce: '/inventory',
+  nonprofit: '/settings/funds',
+}
+
 export default function PricingPage() {
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
   const [showComparison, setShowComparison] = useState(false)
@@ -122,7 +129,14 @@ export default function PricingPage() {
         <div className="mt-8 space-y-10">
           {Object.entries(groupedAddOns).map(([group, addOns]) => (
             <div key={group}>
-              <h3 className="text-lg font-semibold text-midnight-800 dark:text-white">{ADDON_GROUP_LABELS[group] || group}</h3>
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-midnight-800 dark:text-white">{ADDON_GROUP_LABELS[group] || group}</h3>
+                {ADDON_GROUP_LINKS[group] && (
+                  <Link href={ADDON_GROUP_LINKS[group]} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+                    Explore in app &rarr;
+                  </Link>
+                )}
+              </div>
               <div className="mt-4 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {addOns.map((a) => {
                   const price = addOnMonthlyPrice(a.id, cycle)
