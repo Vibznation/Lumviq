@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import DocumentsPanel from '../../../components/DocumentsPanel'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; subtype: string | null }
@@ -265,6 +266,10 @@ function InvoiceDetailContent() {
           )}
         </div>
       )}
+
+      <div className="mt-4">
+        <DocumentsPanel relatedType="invoice" relatedId={invoice.id} />
+      </div>
     </div>
   )
 }

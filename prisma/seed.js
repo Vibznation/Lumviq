@@ -231,6 +231,129 @@ async function main() {
     ],
   })
   console.log('Bank account and transactions seeded')
+
+  // --- Customers, vendors, and draft invoices/bills (so the Sales/Purchasing
+  // pages have visible demo records, not just raw ledger entries) ---
+  const findOrCreateCustomer = async (name, email) => {
+    let c = await prisma.customer.findFirst({ where: { organizationId: org.id, name } })
+    if (!c) c = await prisma.customer.create({ data: { organizationId: org.id, name, email } })
+    return c
+  }
+  const findOrCreateVendor = async (name, email) => {
+    let v = await prisma.vendor.findFirst({ where: { organizationId: org.id, name } })
+    if (!v) v = await prisma.vendor.create({ data: { organizationId: org.id, name, email } })
+    return v
+  }
+
+  const acme = await findOrCreateCustomer('Acme Co.', 'billing@acme.example')
+  const globex = await findOrCreateCustomer('Globex Inc.', 'ap@globex.example')
+  const initech = await findOrCreateCustomer('Initech LLC', 'accounts@initech.example')
+
+  const officeSupplyCo = await findOrCreateVendor('Office Supply Co.', 'sales@officesupply.example')
+  const cloudHosting = await findOrCreateVendor('Cloud Hosting Partners', 'billing@cloudhosting.example')
+
+  const findOrCreateInvoice = async (invoiceNumber, customerId, amount) => {
+    let inv = await prisma.invoice.findFirst({ where: { organizationId: org.id, invoiceNumber } })
+    if (inv) return inv
+    return prisma.invoice.create({
+      data: {
+        organizationId: org.id,
+        customerId,
+        invoiceNumber,
+        status: 'draft',
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 86400000),
+        subtotal: amount,
+        total: amount,
+        lines: {
+          create: [
+            { description: 'Consulting services', quantity: '1', unitPrice: amount, amount, accountId: revenue.id },
+          ],
+        },
+      },
+    })
+  }
+  const findOrCreateBill = async (billNumber, vendorId, amount) => {
+    let bill = await prisma.bill.findFirst({ where: { organizationId: org.id, billNumber } })
+    if (bill) return bill
+    return prisma.bill.create({
+      data: {
+        organizationId: org.id,
+        vendorId,
+        billNumber,
+        status: 'draft',
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 86400000),
+        subtotal: amount,
+        total: amount,
+        lines: {
+          create: [
+            { description: 'Monthly services', quantity: '1', unitPrice: amount, amount, accountId: expense.id },
+          ],
+        },
+      },
+    })
+  }
+
+  await findOrCreateInvoice('DEMO-1001', acme.id, '1200.00')
+  await findOrCreateInvoice('DEMO-1002', globex.id, '850.00')
+  await findOrCreateInvoice('DEMO-1003', initech.id, '2400.00')
+  await findOrCreateBill('DEMO-B-1001', officeSupplyCo.id, '145.50')
+  await findOrCreateBill('DEMO-B-1002', cloudHosting.id, '399.00')
+  console.log('Demo customers, vendors, invoices and bills seeded')
+
+  // --- Dimensions (department tagging) ---
+  let deptDimension = await prisma.dimension.findFirst({ where: { organizationId: org.id, name: 'Department' } })
+  if (!deptDimension) {
+    deptDimension = await prisma.dimension.create({
+      data: {
+        organizationId: org.id,
+        name: 'Department',
+        values: { create: [{ name: 'Operations' }, { name: 'Marketing' }, { name: 'Engineering' }] },
+      },
+    })
+  }
+
+  // --- Nonprofit fund + grant (harmless for for-profit demo org too) ---
+  let generalFund = await prisma.fund.findFirst({ where: { organizationId: org.id, name: 'General Fund' } })
+  if (!generalFund) {
+    generalFund = await prisma.fund.create({
+      data: { organizationId: org.id, name: 'General Fund', type: 'unrestricted' },
+    })
+  }
+  const existingGrant = await prisma.grant.findFirst({ where: { organizationId: org.id, name: 'Community Impact Grant' } })
+  if (!existingGrant) {
+    await prisma.grant.create({
+      data: {
+        organizationId: org.id,
+        fundId: generalFund.id,
+        name: 'Community Impact Grant',
+        grantorName: 'Example Foundation',
+        totalAwarded: '10000.00',
+        amountSpent: '2500.00',
+        startDate: new Date(),
+        status: 'active',
+      },
+    })
+  }
+
+  // --- Contractor (1099) linked to a vendor ---
+  const existingContractor = await prisma.contractor.findFirst({ where: { organizationId: org.id, name: 'Jordan Rivera' } })
+  if (!existingContractor) {
+    await prisma.contractor.create({
+      data: { organizationId: org.id, name: 'Jordan Rivera', email: 'jordan@example.com', vendorId: cloudHosting.id },
+    })
+  }
+
+  // --- Manual exchange rate ---
+  const existingRate = await prisma.exchangeRate.findFirst({ where: { organizationId: org.id, baseCurrency: 'USD', quoteCurrency: 'EUR' } })
+  if (!existingRate) {
+    await prisma.exchangeRate.create({
+      data: { organizationId: org.id, baseCurrency: 'USD', quoteCurrency: 'EUR', rate: '0.92', asOfDate: new Date() },
+    })
+  }
+
+  console.log('Dimensions, fund/grant, contractor and exchange rate seeded')
 }
 
 main()

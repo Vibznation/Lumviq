@@ -47,7 +47,25 @@ Lumviq's core double-entry ledger, plus these modules built on top of it:
 - **Reports** — trial balance, P&L, balance sheet, AR/AP aging, tax summary, budget vs actual, inventory valuation.
 - **Intelligence** — deterministic, rule-based insights (cash forecast, overdue receivables, unusual-transaction detection, category frequency). Not an LLM; see [docs/known-limitations.md](docs/known-limitations.md).
 - **Integrations** — interfaces only for bank feeds/payments/OCR (`src/lib/integrations/`); UI always shows "Not connected" until a real provider is wired in.
+- **Documents** — file attachments on bills/invoices (local disk storage, 10MB limit).
+- **Notifications** — in-app notification bell (no email/push).
+- **Approvals** — pending-action gating; bill payments ≥ $500 require sign-off before posting (see [known limitations](docs/known-limitations.md) for which actions are/aren't gated).
+- **Data import/export** — CSV import (with dry-run preview) and export for customers, vendors and chart of accounts.
+- **Nonprofit** — fund and grant tracking (informational; not synced to the ledger automatically).
+- **Multi-currency** — manually entered exchange rates for display/conversion only.
+- **Dimensions** — department/location/program tagging on manual journal entry lines.
+- **Contractors** — 1099 contractor directory with year-to-date spend (no 1099 filing).
+- **Webhooks** — outbound subscriptions with signed delivery logging (no real HTTP dispatch yet — see [integration adapters](docs/integration-adapters.md)).
+- **Global command bar** — structured search across customers/vendors/invoices/bills/accounts.
 
 See [docs/roadmap.md](docs/roadmap.md) for what's planned next and [docs/known-limitations.md](docs/known-limitations.md) for explicit scope boundaries.
 
-Progress: core ledger plus Sales, Purchasing, Inventory, Projects, Budgeting, Multi-entity, Payroll, Intelligence and Reports modules implemented and verified (`tsc --noEmit`, `vitest run`, `next build` all pass).
+Additional documentation: [architecture](docs/architecture.md) ·
+[permissions matrix](docs/permissions-matrix.md) ·
+[integration adapters](docs/integration-adapters.md) ·
+[security notes](docs/security-notes.md) ·
+[deployment](docs/deployment.md) ·
+[verification report](docs/verification-report.md) ·
+[ledger posting matrix](docs/ledger_posting_matrix.md)
+
+Progress: core ledger plus Sales, Purchasing, Inventory, Projects, Budgeting, Multi-entity, Payroll, Intelligence, Reports, Documents, Notifications, Approvals, Import/Export, Nonprofit, Multi-currency, Dimensions, Contractors and Webhooks modules implemented and verified (`tsc --noEmit`, `vitest run`, `next build` all pass — see [verification report](docs/verification-report.md)).

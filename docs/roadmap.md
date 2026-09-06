@@ -37,6 +37,19 @@
   and `SubscriptionEvent`/`ContactSalesSubmission` tables for audit and
   lead capture. See [Lumviq marketing/billing phase](lumviq-marketing-billing.md)
   for full detail on what's live vs. simulated.
+- **Phase 5 expansion**: Documents (file attachments on bills/invoices),
+  in-app Notifications, Approval Center (pending-action gating, wired
+  end-to-end for bill payments ≥ $500), Data Import/Export (CSV for
+  customers/vendors/accounts with dry-run preview), Nonprofit fund/grant
+  tracking, manually-entered multi-currency exchange rates, Dimensions
+  (department/location/program tagging on manual journal entries),
+  Contractor (1099) directory, outbound Webhooks (signed delivery
+  logging), a functional global command bar (record search), AI
+  interaction audit logging for Intelligence insights, and security
+  hardening (CSP/security headers, in-memory auth rate limiting). See
+  [known-limitations.md](known-limitations.md) for the honest scope
+  boundary of each of these, and [verification-report.md](verification-report.md)
+  for the commands run to verify this phase.
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -47,10 +60,7 @@
 - Receipt/bill OCR provider behind the existing `OcrProvider` interface.
 - Payroll tax withholding/filing and direct deposit via a licensed
   payroll provider integration (e.g., Check, Gusto embedded).
-- Multi-currency support.
-- FIFO/LIFO inventory costing options (currently average-cost only).
 - Scheduled/cached report generation for large datasets.
-- Fund accounting specifics for nonprofit organizations.
 - Three-way PO matching (purchase order → receipt → bill).
 - A real payment processor behind Lumviq Payments and a licensed payroll
   provider behind the Payroll add-ons (both currently priced/configured
@@ -58,4 +68,15 @@
   `/pricing`).
 - Analytics vendor + cookie-consent banner (the `track()` helper in
   `src/lib/analytics.ts` is wired but inert until a vendor is chosen).
+- Live exchange-rate provider (currently manual entry only).
+- Real outbound webhook delivery (currently logs deliveries but does not
+  perform the HTTP call — no public API emits real events yet).
+- Approver-role restriction on the Approval Center (currently any
+  organization member can approve/reject).
+- Object storage for Documents (currently local disk — see
+  [security-notes.md](security-notes.md)).
+- Dedicated unit tests for the Phase 5 domain modules (approvals,
+  documents, notifications, currency, dimensions, contractors,
+  nonprofit, import-export, webhooks).
+- FIFO/LIFO inventory costing options (currently average-cost only).
 
