@@ -153,5 +153,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   })
 
+  // Log every computation for audit purposes (see prompt.md's AI
+  // INTELLIGENCE requirement to log suggestions/insights). This is a log
+  // of a deterministic calculation, not a model interaction.
+  await prisma.aiInteraction.create({
+    data: {
+      organizationId,
+      userId: user.id,
+      kind: 'intelligence.insights',
+      basis: insights.map((i) => i.type).join(','),
+      inputSummary: { organizationId },
+      outputSummary: { insightCount: insights.length, types: insights.map((i) => i.type) },
+    },
+  })
+
   return res.status(200).json({ insights, generatedAt: new Date().toISOString() })
 }
+

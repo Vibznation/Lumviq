@@ -5,6 +5,8 @@ import { brand } from '../lib/brand'
 import { useAuth } from '../lib/auth-context'
 import { resolveEntitlements, hasFeature, hasAddOn } from '../lib/entitlements'
 import { getPlan } from '../lib/plans'
+import CommandBar from './CommandBar'
+import NotificationBell from './NotificationBell'
 
 /**
  * `featureKey` gates on a FEATURE_CATALOG key from the org's plan.
@@ -23,6 +25,8 @@ const NAV_ITEMS: Array<{ label: string; href: string; featureKey?: string; addOn
   { label: 'Payroll', href: '/payroll', addOnIds: ['payroll-start', 'payroll-complete', 'payroll-complete-hr'] },
   { label: 'Reports', href: '/reports' },
   { label: 'Intelligence', href: '/intelligence' },
+  { label: 'Approvals', href: '/approvals' },
+  { label: 'Data', href: '/data/import-export' },
   { label: 'Settings', href: '/settings/organization' },
 ]
 
@@ -125,15 +129,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </select>
           )}
           <div className="flex-1 max-w-xl">
-            <input
-              type="text"
-              placeholder={`Ask ${brand.name}, search records or create something…`}
-              className="w-full text-sm rounded-md border border-gray-300 dark:border-midnight-700 bg-gray-50 dark:bg-midnight-800 dark:text-gray-100 px-3 py-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-500"
-              aria-label="Global command bar"
-              disabled
-              title="Command bar actions are on the roadmap"
-            />
+            <CommandBar />
           </div>
+          <NotificationBell />
         </header>
         <main className="flex-1 p-4 md:p-8 max-w-6xl w-full mx-auto">{children}</main>
       </div>

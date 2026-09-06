@@ -71,11 +71,16 @@ function OrganizationSettingsContent() {
       <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Organization settings</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{currentOrg?.name}</p>
 
-      <div className="mb-6 flex gap-4 text-sm">
+      <div className="mb-6 flex gap-4 text-sm flex-wrap">
         <Link href="/settings/multi-entity" className="text-teal-700 dark:text-teal-400 hover:underline">Multi-entity management</Link>
         <Link href="/settings/tax-rates" className="text-teal-700 dark:text-teal-400 hover:underline">Tax rates</Link>
         <Link href="/settings/integrations" className="text-teal-700 dark:text-teal-400 hover:underline">Integrations</Link>
         <Link href="/settings/billing" className="text-teal-700 dark:text-teal-400 hover:underline">Billing</Link>
+        <Link href="/settings/dimensions" className="text-teal-700 dark:text-teal-400 hover:underline">Dimensions</Link>
+        <Link href="/settings/currencies" className="text-teal-700 dark:text-teal-400 hover:underline">Currencies</Link>
+        <Link href="/settings/funds" className="text-teal-700 dark:text-teal-400 hover:underline">Funds &amp; grants</Link>
+        <Link href="/settings/contractors" className="text-teal-700 dark:text-teal-400 hover:underline">Contractors</Link>
+        <Link href="/settings/webhooks" className="text-teal-700 dark:text-teal-400 hover:underline">Webhooks</Link>
       </div>
 
       {error && (

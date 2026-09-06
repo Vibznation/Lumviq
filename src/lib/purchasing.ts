@@ -155,6 +155,44 @@ export async function postBillPaymentToLedger(tx: any, payment: any, billNumber:
   return entry
 }
 
+/**
+ * Creates a bill payment and posts it to the ledger, updating the bill's
+ * amountPaid/status. Shared by the direct payment API route and the
+ * approvals executor (see src/lib/approvals.ts) so a payment that requires
+ * approval is created identically whether it posts immediately or only
+ * after sign-off.
+ */
+export async function createAndPostBillPayment(
+  tx: any,
+  bill: any,
+  input: { amount: string; paymentDate: string | Date; method?: string | null; paymentAccountId: string },
+  actorId: string
+) {
+  const payment = await tx.billPayment.create({
+    data: {
+      billId: bill.id,
+      organizationId: bill.organizationId,
+      amount: input.amount,
+      paymentDate: new Date(input.paymentDate),
+      method: input.method || null,
+      paymentAccountId: input.paymentAccountId,
+    },
+  })
+
+  const entry = await postBillPaymentToLedger(tx, payment, bill.billNumber, actorId)
+  await tx.billPayment.update({ where: { id: payment.id }, data: { journalEntryId: entry.id } })
+
+  const amountMinor = toMinorUnits(input.amount)
+  const newAmountPaidMinor = toMinorUnits(bill.amountPaid.toString()) + amountMinor
+  const newStatus = newAmountPaidMinor >= toMinorUnits(bill.total.toString()) ? 'paid' : 'partially_paid'
+
+  return tx.bill.update({
+    where: { id: bill.id },
+    data: { amountPaid: fromMinorUnits(newAmountPaidMinor), status: newStatus },
+    include: { lines: true, vendor: true, payments: true },
+  })
+}
+
 /** Computes bill subtotal/total from line items using integer minor-unit arithmetic (never floating point). */
 export function computeBillTotals(lines: Array<{ quantity: string | number; unitPrice: string | number }>, taxTotal: string | number = '0') {
   const lineAmounts = lines.map((l) => {

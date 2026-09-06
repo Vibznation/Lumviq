@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
-import { postBillPaymentToLedger } from '../../../../lib/purchasing'
-import { toMinorUnits, fromMinorUnits } from '../../../../lib/money'
+import { createAndPostBillPayment } from '../../../../lib/purchasing'
+import { toMinorUnits } from '../../../../lib/money'
+import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -35,32 +36,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const payment = await tx.billPayment.create({
-        data: {
-          billId: bill.id,
+    if (amountRequiresApproval('bill-payment', Number(amount))) {
+      const approval = await prisma.$transaction((tx) =>
+        requestApproval(tx, {
           organizationId: bill.organizationId,
+          resourceType: 'bill-payment',
+          resourceId: bill.id,
           amount,
-          paymentDate: new Date(paymentDate),
-          method: method || null,
-          paymentAccountId,
-        },
-      })
+          payload: { amount, paymentDate, method: method || null, paymentAccountId },
+          requestedByUserId: user.id,
+          note: `Payment for bill ${bill.billNumber}`,
+        })
+      )
+      return res.status(202).json({ requiresApproval: true, approval })
+    }
 
-      const entry = await postBillPaymentToLedger(tx, payment, bill.billNumber, user.id)
-      await tx.billPayment.update({ where: { id: payment.id }, data: { journalEntryId: entry.id } })
-
-      const newAmountPaidMinor = toMinorUnits(bill.amountPaid.toString()) + amountMinor
-      const newStatus = newAmountPaidMinor >= toMinorUnits(bill.total.toString()) ? 'paid' : 'partially_paid'
-
-      return tx.bill.update({
-        where: { id: bill.id },
-        data: { amountPaid: fromMinorUnits(newAmountPaidMinor), status: newStatus },
-        include: { lines: true, vendor: true, payments: true },
-      })
-    })
+    const result = await prisma.$transaction((tx) =>
+      createAndPostBillPayment(tx, bill, { amount, paymentDate, method: method || null, paymentAccountId }, user.id)
+    )
     return res.status(201).json(result)
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
   }
 }
+

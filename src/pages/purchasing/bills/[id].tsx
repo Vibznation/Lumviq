@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import DocumentsPanel from '../../../components/DocumentsPanel'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; subtype: string | null }
@@ -33,6 +34,7 @@ function BillDetailContent() {
   const [bill, setBill] = useState<Bill | null>(null)
   const [bankAccounts, setBankAccounts] = useState<Account[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
@@ -104,6 +106,7 @@ function BillDetailContent() {
     if (!paymentAmount) return setError('Enter a payment amount')
     setBusy(true)
     setError(null)
+    setInfo(null)
     try {
       const res = await fetch(`/api/bills/${bill.id}/payments`, {
         method: 'POST',
@@ -114,7 +117,11 @@ function BillDetailContent() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Could not record payment')
       }
-      setPaymentAmount('')
+      if (res.status === 202) {
+        setInfo('This payment amount requires approval before it will post — see Approvals.')
+      } else {
+        setPaymentAmount('')
+      }
       await load()
     } catch (err: any) {
       setError(err.message)
@@ -142,6 +149,12 @@ function BillDetailContent() {
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
           {error}
+        </div>
+      )}
+
+      {info && (
+        <div className="mb-4 text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">
+          {info}
         </div>
       )}
 
@@ -265,6 +278,10 @@ function BillDetailContent() {
           )}
         </div>
       )}
+
+      <div className="mt-4">
+        <DocumentsPanel relatedType="bill" relatedId={bill.id} />
+      </div>
     </div>
   )
 }

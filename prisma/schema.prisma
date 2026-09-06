@@ -13,6 +13,8 @@ model User {
   name          String?
   passwordHash  String?                @map("password_hash")
   emailVerified Boolean                @default(false) @map("email_verified")
+  mfaEnabled    Boolean                @default(false) @map("mfa_enabled")
+  passkeyRegistered Boolean            @default(false) @map("passkey_registered")
   createdAt     DateTime               @default(now()) @map("created_at")
   updatedAt     DateTime               @updatedAt @map("updated_at")
   memberships   OrganizationMembership[]
@@ -53,6 +55,19 @@ model Organization {
   employees      Employee[]
   payRuns        PayRun[]
   subscriptionEvents SubscriptionEvent[]
+  documents      Document[]
+  notifications  Notification[]
+  approvals      Approval[]
+  importJobs     ImportJob[]
+  exportJobs     ExportJob[]
+  funds          Fund[]
+  grants         Grant[]
+  programs       Program[]
+  exchangeRates  ExchangeRate[]
+  dimensions     Dimension[]
+  contractors    Contractor[]
+  aiInteractions AiInteraction[]
+  webhooks       Webhook[]
 
   parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
   childOrganizations   Organization[] @relation("OrganizationHierarchy")
@@ -149,9 +164,11 @@ model JournalLine {
   description   String?
   amount        Decimal      @db.Decimal(20, 6)
   isDebit       Boolean      @map("is_debit")
+  dimensionValueId String?   @map("dimension_value_id")
 
   journalEntry  JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   account       Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  dimensionValue DimensionValue? @relation(fields: [dimensionValueId], references: [id], onDelete: SetNull)
 
   @@map("journal_lines")
 }
@@ -365,6 +382,7 @@ model Vendor {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bills          Bill[]
+  contractors    Contractor[]
 
   @@map("vendors")
 }
@@ -628,5 +646,257 @@ model ContactSalesSubmission {
   createdAt          DateTime @default(now()) @map("created_at")
 
   @@map("contact_sales_submissions")
+}
+
+/// Uploaded file metadata (receipts, attachments) linked to any record via
+/// relatedType/relatedId. Files are stored on local disk under /uploads in
+/// development; see src/lib/documents.ts — no cloud storage provider is
+/// configured, so this is not yet durable/production storage.
+model Document {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  fileName         String    @map("file_name")
+  mimeType         String    @map("mime_type")
+  sizeBytes        Int       @map("size_bytes")
+  storagePath      String    @map("storage_path")
+  relatedType      String?   @map("related_type")
+  relatedId        String?   @map("related_id")
+  uploadedByUserId String?   @map("uploaded_by_user_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("documents")
+}
+
+/// In-app notifications. userId null = organization-wide notification.
+model Notification {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  userId         String?   @map("user_id")
+  type           String
+  title          String
+  message        String
+  link           String?
+  read           Boolean   @default(false)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+/// Pending sign-off on a sensitive action (bill/expense/payment/journal
+/// entry over a configured threshold). Approve/reject before the source
+/// record may be posted — see src/lib/approvals.ts.
+model Approval {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id")
+  resourceType      String    @map("resource_type")
+  resourceId        String    @map("resource_id")
+  status            String    @default("pending")
+  amount            Decimal?  @db.Decimal(20, 6)
+  /// Parameters needed to execute the pending action once approved (e.g. a
+  /// bill payment's amount/paymentDate/method/paymentAccountId). Nothing is
+  /// posted to the ledger until an approval with a payload is approved.
+  payload           Json?
+  note              String?
+  requestedByUserId String    @map("requested_by_user_id")
+  decidedByUserId   String?   @map("decided_by_user_id")
+  decidedAt         DateTime? @map("decided_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("approvals")
+}
+
+model ImportJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id")
+  entityType      String    @map("entity_type")
+  status          String    @default("pending")
+  dryRun          Boolean   @default(true) @map("dry_run")
+  fileName        String?   @map("file_name")
+  totalRows       Int       @default(0) @map("total_rows")
+  successRows     Int       @default(0) @map("success_rows")
+  errorRows       Int       @default(0) @map("error_rows")
+  errors          Json?
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("import_jobs")
+}
+
+model ExportJob {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id")
+  entityType      String    @map("entity_type")
+  status          String    @default("pending")
+  rowCount        Int       @default(0) @map("row_count")
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("export_jobs")
+}
+
+/// Nonprofit fund accounting: a fund groups restricted/unrestricted money.
+model Fund {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  type           String    @default("unrestricted")
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  grants         Grant[]
+
+  @@map("funds")
+}
+
+model Grant {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  fundId         String?   @map("fund_id")
+  name           String
+  grantorName    String    @map("grantor_name")
+  totalAwarded   Decimal   @db.Decimal(20, 6) @map("total_awarded")
+  amountSpent    Decimal   @default(0) @db.Decimal(20, 6) @map("amount_spent")
+  startDate      DateTime  @map("start_date")
+  endDate        DateTime? @map("end_date")
+  status         String    @default("active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fund           Fund?     @relation(fields: [fundId], references: [id], onDelete: SetNull)
+
+  @@map("grants")
+}
+
+model Program {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("programs")
+}
+
+model ExchangeRate {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  baseCurrency   String    @map("base_currency")
+  quoteCurrency  String    @map("quote_currency")
+  rate           Decimal   @db.Decimal(20, 8)
+  asOfDate       DateTime  @map("as_of_date")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, baseCurrency, quoteCurrency, asOfDate])
+  @@map("exchange_rates")
+}
+
+model Dimension {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  values         DimensionValue[]
+
+  @@unique([organizationId, name])
+  @@map("dimensions")
+}
+
+model DimensionValue {
+  id            String    @id @default(uuid()) @db.Uuid
+  dimensionId   String    @map("dimension_id")
+  name          String
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  dimension     Dimension @relation(fields: [dimensionId], references: [id], onDelete: Cascade)
+  journalLines  JournalLine[]
+
+  @@unique([dimensionId, name])
+  @@map("dimension_values")
+}
+
+/// Lightweight 1099 contractor directory entry, optionally linked to a
+/// Vendor record used for bill payments.
+model Contractor {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  vendorId       String?   @map("vendor_id")
+  name           String
+  email          String?
+  taxIdLast4     String?   @map("tax_id_last4")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor         Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@map("contractors")
+}
+
+/// Audit log of every Lumviq Intelligence computation, so insights are
+/// traceable even though they are computed live and not stored elsewhere.
+model AiInteraction {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  userId         String?   @map("user_id")
+  kind           String
+  basis          String?
+  inputSummary   Json?     @map("input_summary")
+  outputSummary  Json?     @map("output_summary")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("ai_interactions")
+}
+
+/// Outbound webhook subscriptions for the public API (not yet exposed —
+/// see src/lib/webhooks.ts).
+model Webhook {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  url            String
+  secret         String
+  eventTypes     String[]  @default([]) @map("event_types")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries     WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id           String    @id @default(uuid()) @db.Uuid
+  webhookId    String    @map("webhook_id")
+  eventType    String    @map("event_type")
+  payload      Json
+  status       String    @default("pending")
+  responseCode Int?      @map("response_code")
+  attempt      Int       @default(1)
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  webhook      Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@map("webhook_deliveries")
 }
 
