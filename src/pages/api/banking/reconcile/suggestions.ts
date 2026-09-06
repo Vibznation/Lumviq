@@ -1,12 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { jaccard, daysBetween } from '../../../../lib/reconcile-utils'
+import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const user = await requireUserFromRequest(req)
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
   const sessionId = req.query.sessionId as string | undefined
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' })
   const session = await prisma.reconciliationSession.findUnique({ where: { id: sessionId } })
   if (!session) return res.status(404).json({ error: 'session not found' })
+  if (!(await userHasMembership(user.id, session.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   const bankTx = await prisma.bankTransaction.findMany({ where: { bankAccountId: session.bankAccountId, transactionDate: { gte: session.startDate, lte: session.endDate }, isCleared: false } })
   const journalLines = await prisma.journalLine.findMany({ where: { journalEntry: { organizationId: session.organizationId } }, include: { journalEntry: true } })
 

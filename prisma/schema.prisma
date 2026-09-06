@@ -23,6 +23,9 @@ model User {
 model Organization {
   id             String                  @id @default(uuid()) @db.Uuid
   name           String
+  orgType        String?                 @default("business") @map("org_type")
+  industry       String?
+  parentOrganizationId String?           @map("parent_organization_id") @db.Uuid
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
   memberships    OrganizationMembership[]
@@ -32,6 +35,23 @@ model Organization {
   invitations    OrganizationInvitation[]
   bankAccounts   BankAccount[]
   sessions       ReconciliationSession[]
+  customers      Customer[]
+  invoices       Invoice[]
+  invoicePayments InvoicePayment[]
+  vendors        Vendor[]
+  bills          Bill[]
+  billPayments   BillPayment[]
+  taxRates       TaxRate[]
+  products       Product[]
+  stockMovements StockMovement[]
+  projects       Project[]
+  timeEntries    TimeEntry[]
+  budgets        Budget[]
+  employees      Employee[]
+  payRuns        PayRun[]
+
+  parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
+  childOrganizations   Organization[] @relation("OrganizationHierarchy")
 
   @@map("organizations")
 }
@@ -94,6 +114,9 @@ model Account {
 
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   journalLines   JournalLine[]
+  invoiceLines   InvoiceLine[]
+  billLines      BillLine[]
+  budgets        Budget[]
 
   @@map("accounts")
 }
@@ -182,6 +205,86 @@ model OrganizationInvitation {
   @@map("organization_invitations")
 }
 
+model Customer {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  email          String?
+  phone          String?
+  billingAddress String?   @map("billing_address")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices       Invoice[]
+
+  @@map("customers")
+}
+
+model Invoice {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id")
+  customerId     String            @map("customer_id")
+  projectId      String?           @map("project_id")
+  invoiceNumber  String            @map("invoice_number")
+  status         String            @default("draft")
+  issueDate      DateTime          @map("issue_date")
+  dueDate        DateTime          @map("due_date")
+  currency       String            @default("USD")
+  subtotal       Decimal           @db.Decimal(20, 6)
+  taxRateId      String?           @map("tax_rate_id")
+  taxTotal       Decimal           @default(0) @db.Decimal(20, 6) @map("tax_total")
+  total          Decimal           @db.Decimal(20, 6)
+  amountPaid     Decimal           @default(0) @db.Decimal(20, 6) @map("amount_paid")
+  journalEntryId String?           @unique @map("journal_entry_id")
+  voidedAt       DateTime?         @map("voided_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer       Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  taxRate        TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  lines          InvoiceLine[]
+  payments       InvoicePayment[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @map("invoice_id")
+  description String
+  quantity    Decimal  @default(1) @db.Decimal(20, 6)
+  unitPrice   Decimal  @db.Decimal(20, 6) @map("unit_price")
+  amount      Decimal  @db.Decimal(20, 6)
+  accountId   String   @map("account_id")
+  productId   String?  @map("product_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@map("invoice_lines")
+}
+
+model InvoicePayment {
+  id             String    @id @default(uuid()) @db.Uuid
+  invoiceId      String    @map("invoice_id")
+  organizationId String    @map("organization_id")
+  amount         Decimal   @db.Decimal(20, 6)
+  paymentDate    DateTime  @map("payment_date")
+  method         String?
+  depositAccountId String  @map("deposit_account_id")
+  journalEntryId String?   @unique @map("journal_entry_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_payments")
+}
+
 model BankAccount {
   id             String                @id @default(uuid()) @db.Uuid
   organizationId String                @map("organization_id")
@@ -245,3 +348,239 @@ model ReconciliationItem {
   @@unique([bankTransactionId])
   @@map("reconciliation_items")
 }
+
+model Vendor {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bills          Bill[]
+
+  @@map("vendors")
+}
+
+model Bill {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id")
+  vendorId       String       @map("vendor_id")
+  billNumber     String       @map("bill_number")
+  vendorReference String?     @map("vendor_reference")
+  status         String       @default("draft")
+  issueDate      DateTime     @map("issue_date")
+  dueDate        DateTime     @map("due_date")
+  currency       String       @default("USD")
+  subtotal       Decimal      @db.Decimal(20, 6)
+  taxRateId      String?      @map("tax_rate_id")
+  taxTotal       Decimal      @default(0) @db.Decimal(20, 6) @map("tax_total")
+  total          Decimal      @db.Decimal(20, 6)
+  amountPaid     Decimal      @default(0) @db.Decimal(20, 6) @map("amount_paid")
+  journalEntryId String?      @unique @map("journal_entry_id")
+  voidedAt       DateTime?    @map("voided_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor         Vendor       @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  taxRate        TaxRate?     @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
+  lines          BillLine[]
+  payments       BillPayment[]
+
+  @@unique([organizationId, billNumber])
+  @@map("bills")
+}
+
+model BillLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  billId      String   @map("bill_id")
+  description String
+  quantity    Decimal  @default(1) @db.Decimal(20, 6)
+  unitPrice   Decimal  @db.Decimal(20, 6) @map("unit_price")
+  amount      Decimal  @db.Decimal(20, 6)
+  accountId   String   @map("account_id")
+  productId   String?  @map("product_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  bill        Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@map("bill_lines")
+}
+
+model BillPayment {
+  id             String       @id @default(uuid()) @db.Uuid
+  billId         String       @map("bill_id")
+  organizationId String       @map("organization_id")
+  amount         Decimal      @db.Decimal(20, 6)
+  paymentDate    DateTime     @map("payment_date")
+  method         String?
+  paymentAccountId String     @map("payment_account_id")
+  journalEntryId String?      @unique @map("journal_entry_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  bill           Bill         @relation(fields: [billId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("bill_payments")
+}
+
+model TaxRate {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  rate           Decimal   @db.Decimal(9, 6)
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices       Invoice[]
+  bills          Bill[]
+
+  @@map("tax_rates")
+}
+
+model Product {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  sku            String?
+  name           String
+  type           String    @default("service")
+  salesPrice     Decimal?  @db.Decimal(20, 6) @map("sales_price")
+  costPrice      Decimal?  @db.Decimal(20, 6) @map("cost_price")
+  quantityOnHand Decimal   @default(0) @db.Decimal(20, 6) @map("quantity_on_hand")
+  incomeAccountId String   @map("income_account_id")
+  expenseAccountId String  @map("expense_account_id")
+  inventoryAssetAccountId String? @map("inventory_asset_account_id")
+  reorderPoint   Decimal?  @db.Decimal(20, 6) @map("reorder_point")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+
+  @@map("products")
+}
+
+model StockMovement {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  productId      String    @map("product_id")
+  type           String
+  quantity       Decimal   @db.Decimal(20, 6)
+  unitCost       Decimal   @db.Decimal(20, 6) @map("unit_cost")
+  referenceType  String?   @map("reference_type")
+  referenceId    String?   @map("reference_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("stock_movements")
+}
+
+model Project {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  customerId     String?   @map("customer_id")
+  name           String
+  status         String    @default("active")
+  budgetAmount   Decimal?  @db.Decimal(20, 6) @map("budget_amount")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  timeEntries    TimeEntry[]
+
+  @@map("projects")
+}
+
+model TimeEntry {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  projectId      String    @map("project_id")
+  userId         String    @map("user_id")
+  date           DateTime
+  hours          Decimal   @db.Decimal(9, 2)
+  billable       Boolean   @default(true)
+  rate           Decimal?  @db.Decimal(20, 6)
+  description    String?
+  invoiced       Boolean   @default(false)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("time_entries")
+}
+
+model Budget {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  accountId      String    @map("account_id")
+  periodMonth    Int       @map("period_month")
+  periodYear     Int       @map("period_year")
+  amount         Decimal   @db.Decimal(20, 6)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, accountId, periodMonth, periodYear])
+  @@map("budgets")
+}
+
+model Employee {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  email          String?
+  payType        String    @default("salary") @map("pay_type")
+  rate           Decimal   @db.Decimal(20, 6)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payRunLines    PayRunLine[]
+
+  @@map("employees")
+}
+
+model PayRun {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  payPeriodStart DateTime  @map("pay_period_start")
+  payPeriodEnd   DateTime  @map("pay_period_end")
+  status         String    @default("draft")
+  totalGross     Decimal   @default(0) @db.Decimal(20, 6) @map("total_gross")
+  journalEntryId String?   @unique @map("journal_entry_id")
+  postedAt       DateTime? @map("posted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines          PayRunLine[]
+
+  @@map("pay_runs")
+}
+
+model PayRunLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  payRunId    String   @map("pay_run_id")
+  employeeId  String   @map("employee_id")
+  grossPay    Decimal  @db.Decimal(20, 6) @map("gross_pay")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  payRun      PayRun   @relation(fields: [payRunId], references: [id], onDelete: Cascade)
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@map("pay_run_lines")
+}
+

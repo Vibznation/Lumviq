@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import ReconcileReview from '../../../components/ReconcileReview'
+import ProtectedRoute from '../../../components/ProtectedRoute'
+import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 async function readJsonResponse<T>(res: Response, fallback: T): Promise<T> {
   if (!res.ok) return fallback
@@ -14,24 +16,24 @@ async function readJsonResponse<T>(res: Response, fallback: T): Promise<T> {
   }
 }
 
-export default function SessionPage() {
+function SessionContent() {
   const router = useRouter()
   const { id } = router.query
+  const { token, currentOrg } = useAuth()
   const [bankTx, setBankTx] = useState<any[]>([])
   const [journalLines, setJournalLines] = useState<any[]>([])
   const [status, setStatus] = useState('')
   const [showReview, setShowReview] = useState(false)
   const [currentSuggestions, setCurrentSuggestions] = useState<any>({})
 
-  useEffect(() => { if (id) load() }, [id])
+  useEffect(() => { if (id && currentOrg) load() }, [id, currentOrg?.id])
 
   async function load() {
-    const res1 = await fetch(`/api/banking/transactions?sessionId=${id}`)
+    const res1 = await fetch(`/api/banking/transactions?sessionId=${id}`, { headers: authHeaders(token) })
     const tx = await readJsonResponse<any[]>(res1, [])
     setBankTx(tx)
 
-    const organizationId = (window as any).ORG_ID || ''
-    const res2 = await fetch(`/api/journal/lines?organizationId=${organizationId}`)
+    const res2 = await fetch(`/api/journal/lines?organizationId=${currentOrg?.id}`, { headers: authHeaders(token) })
     const jl = await readJsonResponse<any[]>(res2, [])
     setJournalLines(jl)
   }
@@ -39,7 +41,7 @@ export default function SessionPage() {
   async function match(txId: string, lineId: string) {
     const res = await fetch('/api/banking/reconcile/match', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify({ sessionId: id, bankTransactionId: txId, journalLineId: lineId })
     })
 
@@ -68,7 +70,7 @@ export default function SessionPage() {
       if (candidates.length === 1) {
         promises.push(fetch('/api/banking/reconcile/match', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
           body: JSON.stringify({ sessionId: id, bankTransactionId: tx.id, journalLineId: candidates[0].id })
         }))
       }
@@ -81,7 +83,7 @@ export default function SessionPage() {
 
   async function getSuggestions() {
     setStatus('Fetching suggestions...')
-    const res = await fetch(`/api/banking/reconcile/suggestions?sessionId=${id}`)
+    const res = await fetch(`/api/banking/reconcile/suggestions?sessionId=${id}`, { headers: authHeaders(token) })
     if (!res.ok) {
       setStatus('Failed to fetch suggestions')
       return
@@ -103,7 +105,7 @@ export default function SessionPage() {
     setStatus('Applying selected mappings...')
     const res = await fetch('/api/banking/reconcile/apply-batch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify({ sessionId: id, mappings })
     })
 
@@ -120,7 +122,7 @@ export default function SessionPage() {
     setStatus('Applying suggestions...')
     const res = await fetch('/api/banking/reconcile/apply-batch', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify({ sessionId: id, strategy: 'auto' })
     })
 
@@ -136,7 +138,7 @@ export default function SessionPage() {
   async function finalize() {
     const res = await fetch('/api/banking/reconcile/finalize', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify({ sessionId: id })
     })
 
@@ -148,59 +150,75 @@ export default function SessionPage() {
     <>
       {showReview && <ReconcileReview suggestions={currentSuggestions} onApply={applyMappings} onClose={() => setShowReview(false)} />}
       {!showReview && (
-        <div style={{ padding: 20 }}>
-          <h1>Reconciliation Session {id}</h1>
-          <div style={{ marginBottom: 10 }}>{status}</div>
-          <h2>Bank transactions</h2>
-          <div style={{ marginBottom: 10 }}>
-            <button onClick={autoMatch}>Auto-match suggestions</button>
-            <button style={{ marginLeft: 8 }} onClick={getSuggestions}>Get Suggestions</button>
-            <button style={{ marginLeft: 8 }} onClick={openReview}>Review Suggestions</button>
-            <button style={{ marginLeft: 8 }} onClick={applyAllSuggestions}>Apply All Suggestions</button>
+        <div className="max-w-3xl">
+          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Reconciliation Session</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{status}</p>
+
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button onClick={autoMatch} className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">Auto-match</button>
+            <button onClick={getSuggestions} className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">Get suggestions</button>
+            <button onClick={openReview} className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">Review suggestions</button>
+            <button onClick={applyAllSuggestions} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">Apply all suggestions</button>
           </div>
 
-          <ul>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Bank transactions</h2>
+          <ul className="space-y-3 mb-6">
             {bankTx.map(tx => (
-              <li key={tx.id} style={{ marginBottom: 12 }}>
-                <div>{tx.transactionDate} {tx.amount} {tx.description} {tx.isCleared ? '(cleared)' : ''}</div>
-                <div style={{ marginTop: 6 }}>
-                  Match to: <select id={`sel-${tx.id}`}>
+              <li key={tx.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-md p-3 text-sm">
+                <div className="text-gray-900 dark:text-gray-100">
+                  {tx.transactionDate} &middot; {tx.amount} &middot; {tx.description} {tx.isCleared ? <span className="text-green-600">(cleared)</span> : null}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <select id={`sel-${tx.id}`} className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1 text-sm">
                     <option value="">--select--</option>
                     {journalLines.map(j => <option key={j.id} value={j.id}>{j.description || j.journalEntryDescription} {j.amount}</option>)}
                   </select>
-                  <button style={{ marginLeft: 8 }} onClick={() => {
-                    const sel = (document.getElementById(`sel-${tx.id}`) as HTMLSelectElement).value
-                    if (sel) match(tx.id, sel)
-                  }}>Match</button>
-
-                  {tx.suggestions && tx.suggestions.length > 0 && (
-                    <div style={{ marginTop: 6 }}>
-                      Suggestions:
-                      <ul>
-                        {tx.suggestions.map((s: any) => (
-                          <li key={s.journalLineId}>
-                            {s.description} {s.amount} — confidence: {Math.round((s.confidence || 0) * 100)}%
-                            <button style={{ marginLeft: 8 }} onClick={() => match(tx.id, s.journalLineId)}>Apply</button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => {
+                      const sel = (document.getElementById(`sel-${tx.id}`) as HTMLSelectElement).value
+                      if (sel) match(tx.id, sel)
+                    }}
+                    className="rounded-md border border-gray-300 dark:border-midnight-700 px-2 py-1 text-sm hover:bg-gray-50 dark:hover:bg-midnight-800"
+                  >
+                    Match
+                  </button>
                 </div>
+
+                {tx.suggestions && tx.suggestions.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Suggestions:
+                    <ul className="mt-1 space-y-1">
+                      {tx.suggestions.map((s: any) => (
+                        <li key={s.journalLineId} className="flex items-center gap-2">
+                          <span>{s.description} {s.amount} &middot; confidence {Math.round((s.confidence || 0) * 100)}%</span>
+                          <button onClick={() => match(tx.id, s.journalLineId)} className="text-teal-700 dark:text-teal-400 hover:underline">Apply</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
 
-          <h2>Journal lines</h2>
-          <ul>
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Journal lines</h2>
+          <ul className="text-sm text-gray-500 dark:text-gray-400 mb-6 space-y-1">
             {journalLines.map(j => <li key={j.id}>{j.journalEntryDescription} — {j.description} — {j.amount}</li>)}
           </ul>
 
-          <div style={{ marginTop: 20 }}>
-            <button onClick={finalize}>Finalize Session</button>
-          </div>
+          <button onClick={finalize} className="rounded-md bg-midnight-700 text-white px-3 py-1.5 text-sm font-medium hover:bg-midnight-800">
+            Finalize session
+          </button>
         </div>
       )}
     </>
+  )
+}
+
+export default function SessionPage() {
+  return (
+    <ProtectedRoute>
+      <SessionContent />
+    </ProtectedRoute>
   )
 }

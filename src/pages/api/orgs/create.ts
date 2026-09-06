@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { verifyToken } from '../../../lib/auth'
+import { defaultChartOfAccounts } from '../../../lib/default-accounts'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -9,9 +10,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const token = auth.split(' ')[1]
   const payload = verifyToken(token)
   if (!payload || !payload.userId) return res.status(401).json({ error: 'Invalid token' })
-  const { name } = req.body
+  const { name, orgType, industry } = req.body
   if (!name) return res.status(400).json({ error: 'name required' })
-  const org = await prisma.organization.create({ data: { name } })
-  await prisma.organizationMembership.create({ data: { userId: payload.userId, organizationId: org.id, role: 'owner' } })
-  return res.status(201).json({ id: org.id, name: org.name })
+  if (orgType && orgType !== 'business' && orgType !== 'nonprofit') {
+    return res.status(400).json({ error: 'orgType must be "business" or "nonprofit"' })
+  }
+
+  const org = await prisma.$transaction(async (tx) => {
+    const created = await tx.organization.create({
+      data: { name, orgType: orgType || 'business', industry: industry || null },
+    })
+    await tx.organizationMembership.create({
+      data: { userId: payload.userId, organizationId: created.id, role: 'owner' },
+    })
+
+    // Seed a starting chart of accounts so the org isn't empty on first login.
+    await tx.account.createMany({
+      data: defaultChartOfAccounts(orgType).map((a) => ({
+        organizationId: created.id,
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        subtype: a.subtype,
+      })),
+    })
+
+    // Seed the current fiscal year (calendar year) with one open accounting period.
+    const now = new Date()
+    const startDate = new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
+    const endDate = new Date(Date.UTC(now.getUTCFullYear(), 11, 31))
+    const fiscalYear = await tx.fiscalYear.create({
+      data: { organizationId: created.id, startDate, endDate },
+    })
+    await tx.accountingPeriod.create({
+      data: { fiscalYearId: fiscalYear.id, startDate, endDate, isClosed: false },
+    })
+
+    return created
+  })
+
+  return res.status(201).json({ id: org.id, name: org.name, orgType: org.orgType, industry: org.industry })
 }
