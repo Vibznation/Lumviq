@@ -1,0 +1,19 @@
+{
+  "name": "Lumviq Devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode",
+        "prisma.prisma"
+      ]
+    }
+  },
+  "postCreateCommand": "pnpm install --frozen-lockfile || npm ci && npx prisma generate || true",
+  "forwardPorts": [3000],
+  "remoteUser": "vscode",
+  "features": {}
+}

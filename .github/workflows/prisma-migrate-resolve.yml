@@ -1,0 +1,48 @@
+name: Prisma Migrate Resolve
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_name:
+        description: "Migration folder name to mark as applied"
+        required: true
+        default: "0003_reconciliation_constraints"
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure DATABASE_URL is configured
+        shell: bash
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "Missing repository secret: SUPABASE_DATABASE_URL"
+            exit 1
+          fi
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Mark migration as applied
+        run: npx prisma migrate resolve --applied "${{ inputs.migration_name }}"
+
+      - name: Show migration status
+        run: npx prisma migrate status

@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  passwordHash String?
+  emailVerified Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships OrganizationMembership[]
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  memberships OrganizationMembership[]
+  accounts  Account[]
+  journalEntries JournalEntry[]
+  fiscalYears FiscalYear[]
+  invitations OrganizationInvitation[]
+}
+
+model OrganizationMembership {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [id])
+  userId         String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  role           String
+  roleId         String?  
+  roleRef        Role?    @relation(fields: [roleId], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+model Role {
+  id        String @id @default(uuid())
+  name      String @unique
+  description String?
+  memberships OrganizationMembership[]
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id   String @id @default(uuid())
+  name String @unique
+  description String?
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id String @id @default(uuid())
+  role Role @relation(fields: [roleId], references: [id])
+  roleId String
+  permission Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+}
+
+model Account {
+  id             String   @id @default(uuid())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  code           String
+  name           String
+  type           String
+  subtype        String?
+  createdAt      DateTime @default(now())
+  journalLines   JournalLine[]
+}
+
+model JournalEntry {
+  id              String   @id @default(uuid())
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  organizationId  String
+  description     String?
+  posted          Boolean  @default(false)
+  postedAt        DateTime?
+  postingUserId   String?
+  idempotencyKey  String?   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lines           JournalLine[]
+}
+
+model JournalLine {
+  id            String  @id @default(uuid())
+  journalEntry  JournalEntry @relation(fields: [journalEntryId], references: [id])
+  journalEntryId String
+  account       Account @relation(fields: [accountId], references: [id])
+  accountId     String
+  description   String?
+  amount        Decimal @db.Decimal(20,6)
+  isDebit       Boolean
+}
+
+model FiscalYear {
+  id             String   @id @default(uuid())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  startDate      DateTime
+  endDate        DateTime
+  createdAt      DateTime @default(now())
+  accountingPeriods AccountingPeriod[]
+}
+
+model AccountingPeriod {
+  id             String   @id @default(uuid())
+  fiscalYear     FiscalYear @relation(fields: [fiscalYearId], references: [id])
+  fiscalYearId   String
+  startDate      DateTime
+  endDate        DateTime
+  isClosed       Boolean  @default(false)
+}
+
+model AuditEvent {
+  id             String   @id @default(uuid())
+  organizationId String
+  actorId        String?
+  action         String
+  resourceType   String
+  resourceId     String
+  previousState  Json?
+  newState       Json?
+  createdAt      DateTime @default(now())
+}
+
+model OrganizationInvitation {
+  id             String   @id @default(uuid())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  email          String
+  token          String   @unique
+  role           String
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime?
+}
