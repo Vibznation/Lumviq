@@ -6,9 +6,17 @@ type Ticket = { id: string; subject: string; message: string; status: string; pr
 
 const STATUS_STYLES: Record<string, string> = {
   open: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  in_progress: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
   resolved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   closed: 'bg-gray-100 text-gray-600 dark:bg-midnight-800 dark:text-gray-400',
 }
+
+const STATUS_OPTIONS = [
+  { value: 'open', label: 'Open' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+]
 
 function SupportContent() {
   const { token, currentOrg } = useAuth()
@@ -18,6 +26,7 @@ function SupportContent() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({ subject: '', message: '', priority: 'standard' })
   const [submitting, setSubmitting] = useState(false)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
 
   async function load() {
     if (!currentOrg) return
@@ -40,6 +49,27 @@ function SupportContent() {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id])
+
+  async function handleStatusChange(ticketId: string, status: string) {
+    setUpdatingId(ticketId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/support-tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not update ticket status')
+      }
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -110,7 +140,16 @@ function SupportContent() {
             <div key={t.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{t.subject}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[t.status] || STATUS_STYLES.open}`}>{t.status}</span>
+                <select
+                  value={t.status}
+                  onChange={(e) => handleStatusChange(t.id, e.target.value)}
+                  disabled={updatingId === t.id}
+                  className={`text-xs px-2 py-0.5 rounded-full border-0 disabled:opacity-50 ${STATUS_STYLES[t.status] || STATUS_STYLES.open}`}
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{t.message}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500">{t.priority} priority — opened {new Date(t.createdAt).toLocaleString()}</p>

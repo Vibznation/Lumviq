@@ -143,6 +143,16 @@
   because no UI previously called the run endpoint. Added
   backward-compatible normalization for both shapes plus a first unit
   test file for this module (`tests/budget-scenarios.test.ts`).
+- **Custom role org-scoping and support ticket status transitions**:
+  `Role` previously had a globally-unique `name` shared across every
+  organization, and `GET /api/roles` returned every organization's
+  custom roles to any member — added `Role.organizationId` (migration
+  `0013_role_org_scope`, backfilled from existing memberships) with a
+  composite `[organizationId, name]` unique constraint, and scoped
+  `GET`/`POST /api/roles` and `PUT /api/roles/[id]/permissions`
+  accordingly. Added `PATCH /api/support-tickets/[id]` for moving a
+  ticket between `open`/`in_progress`/`resolved`/`closed`, wired to a
+  status dropdown on `/support`.
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -175,9 +185,6 @@
 - A background scheduler (or documented external cron pattern) to run
   Workflow automation rules and the `/api/jobs/process` queue
   automatically instead of only on-demand.
-- Ticket-status transitions (e.g. resolve/close) for Support tickets,
-  and per-organization role scoping so custom role names don't collide
-  globally.
 - Bill-line-to-PO-line matching by a real foreign key instead of
   description-text matching, for accurate three-way match results.
 - Multi-level (grandchild) consolidation hierarchies.

@@ -3,11 +3,11 @@ import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 
 /**
- * Custom roles. NOTE: Role.name is globally unique in this schema (roles
- * are not tenant-scoped) — see docs/known-limitations.md. Any
- * organization member can view all roles; creating one requires a
- * globally-unique name, which the UI should hint at (e.g. prefixing with
- * the organization name) to avoid collisions across organizations.
+ * Custom roles, scoped per organization (Role.organizationId + a
+ * composite [organizationId, name] unique constraint — see migration
+ * 0013_role_org_scope). Only members of an organization can view or
+ * create its roles; role names may repeat across different
+ * organizations.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -18,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
     const roles = await prisma.role.findMany({
+      where: { organizationId },
       include: { rolePermissions: { include: { permission: true } } },
       orderBy: { name: 'asc' },
     })
@@ -29,11 +30,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
-    const existing = await prisma.role.findUnique({ where: { name } })
-    if (existing) return res.status(409).json({ error: 'A role with this name already exists. Try a more specific name.' })
+    const existing = await prisma.role.findUnique({ where: { organizationId_name: { organizationId, name } } })
+    if (existing) return res.status(409).json({ error: 'A role with this name already exists in this organization.' })
 
     const role = await prisma.role.create({
       data: {
+        organizationId,
         name,
         description: description || null,
         rolePermissions: {

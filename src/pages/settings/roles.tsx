@@ -7,9 +7,8 @@ type Permission = { id: string; name: string; description: string | null }
 type Role = { id: string; name: string; description: string | null; rolePermissions: Array<{ permission: Permission }> }
 
 /**
- * Custom roles. Role names are globally unique across all organizations
- * in this schema (not tenant-scoped) — the form nudges users to prefix
- * role names to avoid collisions. See docs/known-limitations.md.
+ * Custom roles, scoped per organization — role names only need to be
+ * unique within the current organization, not across the whole platform.
  */
 function RolesContent() {
   const { token, currentOrg } = useAuth()
@@ -122,7 +121,7 @@ function RolesContent() {
         <form onSubmit={handleCreate} className="mb-6 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Role name (must be globally unique — consider prefixing with your org name)</label>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Role name (must be unique within this organization)</label>
               <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
             </div>
             <div>

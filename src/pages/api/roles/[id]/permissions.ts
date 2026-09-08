@@ -19,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const role = await prisma.role.findUnique({ where: { id } })
   if (!role) return res.status(404).json({ error: 'Role not found' })
+  if (role.organizationId !== organizationId) return res.status(403).json({ error: 'Forbidden' })
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.rolePermission.deleteMany({ where: { roleId: id } })

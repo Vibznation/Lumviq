@@ -139,12 +139,11 @@ explicit scope boundaries so no feature is misrepresented.
   a restricted-fund balance.
 
 ## Custom roles
-- `Role.name` is **globally unique** across the entire application, not
-  scoped per organization (`src/pages/api/roles/index.ts`) — this is a
-  schema-level limitation, not a UI bug. Two organizations cannot both
-  have a role named e.g. "Manager"; the settings page hints at
-  prefixing role names with the organization name to avoid collisions,
-  but does not enforce it.
+- `Role` rows are scoped per organization (`Role.organizationId` +
+  `@@unique([organizationId, name])`, see migration
+  `0013_role_org_scope`) — role names only need to be unique within
+  their own organization, and members of one organization can no longer
+  see or edit another organization's custom roles.
 
 ## Workflow automation
 - There is **no background scheduler**. Workflow rules (`WorkflowRule`)
@@ -172,10 +171,12 @@ explicit scope boundaries so no feature is misrepresented.
 ## Support tickets
 - `/support` and `POST /api/support-tickets` are an **in-app ticket
   log** only — there is no live chat, no external help-desk/ticketing
-  system integration, and no route to change a ticket's status after
-  creation (tickets stay `open` until a future admin action is added).
-  The displayed response-time expectation is derived from the
-  organization's plan (`src/lib/support.ts`) and is informational only.
+  system integration. `PATCH /api/support-tickets/[id]` lets any
+  organization member move a ticket between `open`, `in_progress`,
+  `resolved` and `closed` (no restriction on transition order — a
+  closed ticket can be reopened). The displayed response-time
+  expectation is derived from the organization's plan
+  (`src/lib/support.ts`) and is informational only.
 
 ## AI chat
 - `POST /api/intelligence/chat` (surfaced as the Chat tab on

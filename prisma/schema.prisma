@@ -91,6 +91,7 @@ model Organization {
   vendorUploadTokens VendorUploadToken[]
   intercompanyOwned      IntercompanyTransaction[] @relation("IntercompanyOwner")
   intercompanyCounterparty IntercompanyTransaction[] @relation("IntercompanyCounterparty")
+  roles          Role[]
 
   parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
   childOrganizations   Organization[] @relation("OrganizationHierarchy")
@@ -116,11 +117,15 @@ model OrganizationMembership {
 
 model Role {
   id          String              @id @default(uuid()) @db.Uuid
-  name        String              @unique
+  organizationId String           @map("organization_id") @db.Uuid
+  name        String
   description String?
   memberships OrganizationMembership[]
   rolePermissions RolePermission[]
 
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
   @@map("roles")
 }
 
