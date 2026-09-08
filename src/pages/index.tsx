@@ -54,36 +54,47 @@ export default function Home() {
       jsonLd={jsonLd}
     >
       {/* Hero */}
-      <Section className="pt-20 pb-12 text-center">
-        <h1 className="text-4xl md:text-6xl font-semibold text-midnight-900 dark:text-white max-w-3xl mx-auto">
-          Complete accounting. Clear decisions.
-        </h1>
-        <p className="mt-6 max-w-2xl mx-auto text-lg text-gray-600 dark:text-gray-400">
-          {brand.name} brings your books, banking, invoices, bills, payroll, inventory, projects and planning into one
-          intelligent platform that stays simple as your business grows.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/signup"
-            onClick={() => track('cta_click', { cta: 'start_free', location: 'hero' })}
-            className="rounded-md bg-teal-600 text-white px-6 py-3 font-medium hover:bg-teal-700"
-          >
-            Start Free
-          </Link>
-          <Link
-            href="/pricing"
-            onClick={() => track('cta_click', { cta: 'see_plans', location: 'hero' })}
-            className="rounded-md border border-gray-300 dark:border-midnight-700 px-6 py-3 font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800"
-          >
-            See Plans
-          </Link>
-        </div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-midnight-900 via-midnight-800 to-teal-900">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(13,196,174,0.35),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(234,171,48,0.25),transparent_40%)]"
+        />
+        <Section className="relative pt-24 pb-16 text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium text-teal-200 ring-1 ring-inset ring-white/20">
+            <span className="h-2 w-2 rounded-full bg-teal-400" aria-hidden="true" />
+            Welcome to {brand.name}
+          </span>
+          <h1 className="mt-6 text-4xl md:text-6xl font-semibold text-white max-w-3xl mx-auto">
+            Complete accounting. <span className="text-teal-300">Clear decisions.</span>
+          </h1>
+          <p className="mt-6 max-w-2xl mx-auto text-lg text-gray-200">
+            {brand.name} brings your books, banking, invoices, bills, payroll, inventory, projects and planning into one
+            intelligent platform that stays simple as your business grows.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/signup"
+              onClick={() => track('cta_click', { cta: 'start_free', location: 'hero' })}
+              className="rounded-md bg-teal-500 text-midnight-950 px-6 py-3 font-semibold shadow-lg shadow-teal-500/20 hover:bg-teal-400"
+            >
+              Start Free
+            </Link>
+            <Link
+              href="/pricing"
+              onClick={() => track('cta_click', { cta: 'see_plans', location: 'hero' })}
+              className="rounded-md border border-white/30 px-6 py-3 font-medium text-white hover:bg-white/10"
+            >
+              See Plans
+            </Link>
+          </div>
 
-        <div className="mt-16 max-w-4xl mx-auto rounded-2xl border border-gray-200 dark:border-midnight-800 bg-gray-50 dark:bg-midnight-900 p-6 text-left shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-gray-400 mb-3">Financial overview &middot; demo organization</p>
-          <ProductTour />
-        </div>
-      </Section>
+          <div className="mt-16 max-w-4xl mx-auto rounded-2xl border border-white/10 bg-white dark:bg-midnight-900 p-6 text-left shadow-2xl">
+            <p className="text-xs uppercase tracking-wide text-gray-400 mb-3">Financial overview &middot; demo organization</p>
+            <ProductTour />
+          </div>
+        </Section>
+      </section>
+
 
       {/* Trust strip */}
       <Section className="py-10 border-t border-gray-100 dark:border-midnight-900">
