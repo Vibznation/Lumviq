@@ -38,6 +38,7 @@ function PlanningContent() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({ accountId: '', periodMonth: '1', amount: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [budgetMessage, setBudgetMessage] = useState<string | null>(null)
 
   const [scenarios, setScenarios] = useState<Scenario[]>([])
   const [scenarioForm, setScenarioForm] = useState({ name: '', basedOnActual: true, accountId: '', percent: '' })
@@ -211,6 +212,7 @@ function PlanningContent() {
     if (!currentOrg || !form.accountId || !form.amount) return
     setSubmitting(true)
     setError(null)
+    setBudgetMessage(null)
     try {
       const res = await fetch('/api/budgets', {
         method: 'POST',
@@ -223,11 +225,13 @@ function PlanningContent() {
           amount: form.amount,
         }),
       })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Could not save budget')
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.error || 'Could not save budget')
+      if (j.requiresApproval) {
+        setBudgetMessage('This budget change exceeds the approval threshold and is pending approval.')
+      } else {
+        setForm((f) => ({ ...f, amount: '' }))
       }
-      setForm((f) => ({ ...f, amount: '' }))
       await load()
     } catch (err: any) {
       setError(err.message)
@@ -277,6 +281,9 @@ function PlanningContent() {
 
       {tab === 'Budget vs Actual' && (
       <>
+      {budgetMessage && (
+        <div className="mb-4 text-sm text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">{budgetMessage}</div>
+      )}
       <form onSubmit={handleSetBudget} className="mb-6 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 grid grid-cols-4 gap-3 max-w-2xl items-end">
         <div>
           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Account</label>

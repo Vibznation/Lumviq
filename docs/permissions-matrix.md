@@ -23,6 +23,14 @@ tables, but no UI exists yet to manage them beyond the seed data — see
 |---|---|---|
 | `invite_members` | Sending an organization invitation | `src/pages/api/orgs/invite.ts` |
 | `bank.reconcile` | Applying a batch of bank-transaction matches / finalizing a reconciliation match | `src/pages/api/banking/reconcile/match.ts`, `apply-batch.ts` |
+| `manage_organization` | Changing an organization's approval thresholds | `src/pages/api/settings/approval-thresholds.ts` |
+| `approvals.decide` | Approving/rejecting a pending `Approval` | `src/pages/api/approvals/[id]/decide.ts` |
+
+Note: like `bank.reconcile` and `manage_organization`, `approvals.decide`
+has no seeded `Permission` row by default — in practice this means only
+the `owner` role can decide approvals until an organization creates a
+custom role (via Settings → Custom roles) that's granted this
+permission and assigns members to it.
 
 ## Membership-gated (no extra permission) actions
 Everything else — creating/editing customers, vendors, invoices, bills,
@@ -36,13 +44,11 @@ both.
 
 ## Approval gate (separate from role permissions)
 The `Approval` pending-action pattern (see
-[architecture.md](architecture.md)) is a workflow control, not a
-role-based permission: **any** member of the organization can approve or
-reject a pending approval today via `POST /api/approvals/[id]/decide` —
-there is no "approver" role restriction yet. This is a known gap; a
-real deployment should restrict approval decisions to owners/admins
-before relying on this as a control, and is tracked in
-[known-limitations.md](known-limitations.md).
+[architecture.md](architecture.md)) is a workflow control, layered on
+top of the `approvals.decide` permission above: deciding
+(`POST /api/approvals/[id]/decide`) requires that permission rather than
+just plain membership, so an organization can restrict who's allowed to
+approve/reject sensitive actions.
 
 ## Tenant isolation
 Permission checks are necessary but not sufficient — every query is also

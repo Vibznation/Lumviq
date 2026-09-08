@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
-import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
+import { requireUserFromRequest, userHasPermission } from '../../../../lib/authorization'
 import { decideApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -16,7 +16,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const approval = await prisma.approval.findUnique({ where: { id } })
   if (!approval) return res.status(404).json({ error: 'Approval not found' })
-  if (!(await userHasMembership(user.id, approval.organizationId))) return res.status(403).json({ error: 'Forbidden' })
+  // Deciding a pending approval is an "approver" action, not plain
+  // membership: owners always qualify (userHasPermission's built-in
+  // bypass); other members need the `approvals.decide` permission
+  // explicitly granted via a custom role (see permissions-matrix.md).
+  if (!(await userHasPermission(user.id, approval.organizationId, 'approvals.decide'))) {
+    return res.status(403).json({ error: 'Forbidden' })
+  }
 
   try {
     const result = await prisma.$transaction((tx) =>

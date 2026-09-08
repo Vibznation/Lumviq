@@ -153,6 +153,20 @@
   accordingly. Added `PATCH /api/support-tickets/[id]` for moving a
   ticket between `open`/`in_progress`/`resolved`/`closed`, wired to a
   status dropdown on `/support`.
+- **Approver-role restriction and expanded approval gating**: deciding a
+  pending `Approval` (`POST /api/approvals/[id]/decide`) previously only
+  required organization membership, so any member could approve/reject
+  sensitive money-moving actions — now gated behind a new
+  `approvals.decide` permission (owners always qualify; other members
+  need it granted via a custom role, matching the existing
+  `bank.reconcile`/`manage_organization` convention of not seeding a
+  default `Permission` row). Also extended amount-threshold approval
+  gating to budget changes (`POST /api/budgets`, new `budget-change`
+  threshold, default $5,000) and added `PATCH /api/banking/accounts/[id]`
+  for editing a bank account's provider/account number, which always
+  requires approval when those sensitive fields change. Vendor-side
+  banking/ACH details still don't exist as a schema concept, so that
+  half of the original "vendor/banking-detail changes" gap remains open.
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -168,9 +182,6 @@
 - Analytics vendor + cookie-consent banner (the `track()` helper in
   `src/lib/analytics.ts` is wired but inert until a vendor is chosen).
 - Live exchange-rate provider (currently manual entry only).
-- Approver-role restriction on the Approval Center (currently any
-  organization member can approve/reject); extending approval gating to
-  budgets and vendor/banking-detail changes.
 - Object storage for Documents (currently local disk — see
   [security-notes.md](security-notes.md)).
 - Dedicated unit tests for the Phase 5/6/7 domain modules (approvals,

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { enforceFeature } from '../../../lib/entitlements'
+import { amountRequiresApproval, requestApproval } from '../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -31,6 +32,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const account = await prisma.account.findUnique({ where: { id: accountId } })
     if (!account || account.organizationId !== organizationId) {
       return res.status(400).json({ error: 'Account does not belong to this organization' })
+    }
+
+    const org = await prisma.organization.findUnique({ where: { id: organizationId } })
+    if (amountRequiresApproval('budget-change', Number(amount), org?.approvalThresholds as any)) {
+      const approval = await prisma.$transaction((tx) =>
+        requestApproval(tx, {
+          organizationId,
+          resourceType: 'budget-change',
+          resourceId: `${accountId}:${periodYear}-${periodMonth}`,
+          amount,
+          payload: { organizationId, accountId, periodMonth, periodYear, amount },
+          requestedByUserId: user.id,
+          note: `Budget change for ${account.name} (${periodMonth}/${periodYear})`,
+        })
+      )
+      return res.status(202).json({ requiresApproval: true, approval })
     }
 
     const budget = await prisma.budget.upsert({

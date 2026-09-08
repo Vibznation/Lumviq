@@ -24,4 +24,10 @@ describe('amountRequiresApproval', () => {
     expect(APPROVAL_THRESHOLDS['payroll-run']).toBe(0)
     expect(amountRequiresApproval('payroll-run', 0.01)).toBe(true)
   })
+
+  it('gates budget changes at or above the default threshold', () => {
+    expect(APPROVAL_THRESHOLDS['budget-change']).toBe(5000)
+    expect(amountRequiresApproval('budget-change', 4999)).toBe(false)
+    expect(amountRequiresApproval('budget-change', 5000)).toBe(true)
+  })
 })

@@ -24,6 +24,15 @@ import { postPayRunToLedger } from './payroll'
  * Organization.approvalThresholds (see src/pages/api/settings/approval-
  * thresholds.ts) — pass that JSON map as the third argument to
  * amountRequiresApproval when available.
+ *
+ * Budget changes (`POST /api/budgets`) are gated the same amount-
+ * threshold way. Banking-detail changes (currently limited to editing
+ * an existing `BankAccount`'s provider/account-number via `PATCH
+ * /api/banking/accounts/[id]`) are not amount-based — any change to the
+ * account number always requires approval, regardless of threshold.
+ * Vendor-side ACH/banking details don't exist in the schema yet, so
+ * that half of "vendor/banking-detail changes" remains unimplemented —
+ * see docs/known-limitations.md.
  */
 export const APPROVAL_THRESHOLDS: Record<string, number> = {
   'bill-payment': 500,
@@ -31,6 +40,7 @@ export const APPROVAL_THRESHOLDS: Record<string, number> = {
   'purchase-order': 1000,
   'journal-entry': 1000,
   'payroll-run': 0,
+  'budget-change': 5000,
 }
 
 export function amountRequiresApproval(
@@ -118,6 +128,37 @@ async function executeApprovedAction(tx: any, approval: any, actorId: string) {
       where: { id: payRun.id },
       data: { status: 'posted', journalEntryId: entry.id, postedAt: new Date() },
       include: { lines: { include: { employee: true } } },
+    })
+  }
+
+  if (approval.resourceType === 'budget-change') {
+    const payload = approval.payload as { organizationId: string; accountId: string; periodMonth: number; periodYear: number; amount: string | number }
+    return tx.budget.upsert({
+      where: {
+        organizationId_accountId_periodMonth_periodYear: {
+          organizationId: payload.organizationId,
+          accountId: payload.accountId,
+          periodMonth: payload.periodMonth,
+          periodYear: payload.periodYear,
+        },
+      },
+      update: { amount: payload.amount },
+      create: { organizationId: payload.organizationId, accountId: payload.accountId, periodMonth: payload.periodMonth, periodYear: payload.periodYear, amount: payload.amount },
+    })
+  }
+
+  if (approval.resourceType === 'banking-detail-change') {
+    const payload = approval.payload as { name?: string; provider?: string; accountNumber?: string; currency?: string }
+    const account = await tx.bankAccount.findUnique({ where: { id: approval.resourceId } })
+    if (!account) throw new Error('Bank account for this approval no longer exists')
+    return tx.bankAccount.update({
+      where: { id: approval.resourceId },
+      data: {
+        ...(payload.name !== undefined ? { name: payload.name } : {}),
+        ...(payload.provider !== undefined ? { provider: payload.provider } : {}),
+        ...(payload.accountNumber !== undefined ? { accountNumber: payload.accountNumber } : {}),
+        ...(payload.currency !== undefined ? { currency: payload.currency } : {}),
+      },
     })
   }
 

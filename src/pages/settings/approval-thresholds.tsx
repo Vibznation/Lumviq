@@ -7,6 +7,7 @@ const RESOURCE_TYPES = [
   { key: 'bill-payment', label: 'Bill payment' },
   { key: 'reimbursement', label: 'Reimbursement' },
   { key: 'purchase-order', label: 'Purchase order' },
+  { key: 'budget-change', label: 'Budget change' },
 ]
 
 function ApprovalThresholdsContent() {

@@ -71,18 +71,25 @@ explicit scope boundaries so no feature is misrepresented.
 
 ## Approvals (pending-action gating)
 - Bill payments, reimbursement payouts, purchase order issuance (draft →
-  sent), manual journal entries, and payroll run posting are gated behind
-  approval when their amount is at or above a configurable threshold
-  (`APPROVAL_THRESHOLDS` defaults in `src/lib/approvals.ts`, overridable
-  per organization via Settings → approval thresholds /
-  `Organization.approvalThresholds`). Payroll runs default to a $0
-  threshold (every run requires sign-off) since payroll moves real money
-  to employees without a preview step elsewhere in the app. Budgets and
-  vendor-banking-detail changes are **not** yet gated — they save
-  immediately regardless of amount.
-- Any organization member can decide (approve/reject) a pending
-  approval — there is no "approver" role restriction yet. See
-  [permissions-matrix.md](permissions-matrix.md).
+  sent), manual journal entries, payroll run posting, and budget changes
+  (`POST /api/budgets`) are gated behind approval when their amount is at
+  or above a configurable threshold (`APPROVAL_THRESHOLDS` defaults in
+  `src/lib/approvals.ts`, overridable per organization via Settings →
+  approval thresholds / `Organization.approvalThresholds`). Payroll runs
+  default to a $0 threshold (every run requires sign-off) since payroll
+  moves real money to employees without a preview step elsewhere in the
+  app. Editing an existing bank account's provider/account number
+  (`PATCH /api/banking/accounts/[id]`) is also always gated (not
+  amount-based — any change to those fields requires approval). Vendor
+  banking/ACH details still don't exist as a schema concept at all (the
+  `Vendor` model has no bank-account fields), so "vendor banking-detail
+  changes" specifically remains unimplemented.
+- Deciding (approve/reject) a pending approval requires the
+  `approvals.decide` permission rather than plain membership — see
+  [permissions-matrix.md](permissions-matrix.md). Like other named
+  permissions in this codebase, it has no seeded `Permission` row by
+  default, so only the `owner` role can decide approvals until an
+  organization creates a custom role granting it.
 
 ## Documents
 - Files are stored on local disk under `uploads/<organizationId>/` (see
