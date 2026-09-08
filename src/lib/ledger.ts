@@ -47,6 +47,51 @@ export function validateJournalEntry(raw: unknown) {
   return parsed as JournalEntry;
 }
 
+/** Sum of the debit side of a balanced journal entry, as a plain decimal number (for approval-threshold comparisons only — never use this for ledger posting math). */
+export function journalEntryDebitTotal(lines: JournalLine[]): number {
+  const { debit } = sumAmounts(lines);
+  return Number(debit) / 1_000_000;
+}
+
+/**
+ * Posts a journal entry using an already-open Prisma transaction client.
+ * Shared by the direct posting API route (wrapped in its own
+ * prisma.$transaction) and the approvals executor (see
+ * src/lib/approvals.ts), which already runs inside a transaction and
+ * cannot open a nested one.
+ */
+export async function postJournalEntryTx(tx: any, entry: JournalEntry, actorId: string) {
+  if (!isBalanced(entry.lines)) throw new Error("Journal entry is not balanced");
+  if (!entry.idempotencyKey) throw new Error("Idempotency key required for posting");
+
+  const postedAt = new Date()
+  const period = await tx.accountingPeriod.findFirst({
+    where: {
+      fiscalYear: { organizationId: entry.organizationId },
+      startDate: { lte: postedAt },
+      endDate: { gte: postedAt },
+    },
+  })
+  if (period && period.isClosed) throw new Error('Accounting period is closed for the posting date')
+
+  const existing = await tx.journalEntry.findUnique({ where: { idempotencyKey: entry.idempotencyKey } });
+  if (existing) return existing;
+  const created = await tx.journalEntry.create({
+    data: {
+      id: entry.id,
+      organizationId: entry.organizationId,
+      description: entry.description,
+      posted: true,
+      postedAt,
+      idempotencyKey: entry.idempotencyKey,
+      lines: { create: entry.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, isDebit: l.isDebit, description: l.description })) },
+    },
+    include: { lines: true },
+  });
+  await tx.auditEvent.create({ data: { organizationId: entry.organizationId, actorId, action: "post_journal_entry", resourceType: "journal_entry", resourceId: created.id, newState: {} } });
+  return created;
+}
+
 // Placeholder for posting logic: must be transactional and idempotent when integrated with DB.
 export async function postJournalEntry(
   ctx: { prisma: any; actorId: string },
@@ -56,37 +101,6 @@ export async function postJournalEntry(
   if (!isBalanced(entry.lines)) throw new Error("Journal entry is not balanced");
   if (!entry.idempotencyKey) throw new Error("Idempotency key required for posting");
 
-  // Check for closed accounting period if postedAt provided
-  const postedAt = entry.posted ? new Date() : null
-  if (postedAt) {
-    const period = await ctx.prisma.accountingPeriod.findFirst({
-      where: {
-        fiscalYear: { organizationId: entry.organizationId },
-        startDate: { lte: postedAt },
-        endDate: { gte: postedAt },
-      },
-    })
-    if (period && period.isClosed) throw new Error('Accounting period is closed for the posting date')
-  }
-
   // The actual implementation must run inside a DB transaction and enforce posted immutability.
-  return await ctx.prisma.$transaction(async (prisma: any) => {
-    const existing = await prisma.journalEntry.findUnique({ where: { idempotencyKey: entry.idempotencyKey } });
-    if (existing) return existing;
-    const created = await prisma.journalEntry.create({
-      data: {
-        id: entry.id,
-        organizationId: entry.organizationId,
-        description: entry.description,
-        posted: true,
-        postedAt: new Date(),
-        idempotencyKey: entry.idempotencyKey,
-        lines: { create: entry.lines.map((l) => ({ accountId: l.accountId, amount: l.amount, isDebit: l.isDebit, description: l.description })) },
-      },
-      include: { lines: true },
-    });
-    // Append an audit event (simplified)
-    await prisma.auditEvent.create({ data: { organizationId: entry.organizationId, actorId: ctx.actorId, action: "post_journal_entry", resourceType: "journal_entry", resourceId: created.id, newState: {} } });
-    return created;
-  });
+  return await ctx.prisma.$transaction(async (tx: any) => postJournalEntryTx(tx, entry, ctx.actorId));
 }

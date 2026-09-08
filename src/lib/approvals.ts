@@ -1,5 +1,8 @@
 import { createNotification } from './notifications'
 import { createAndPostBillPayment } from './purchasing'
+import { postJournalEntryTx, type JournalEntry } from './ledger'
+import { postReimbursementToLedger } from './reimbursements'
+import { postPayRunToLedger } from './payroll'
 
 /**
  * Approval gating for sensitive money-moving actions, per prompt.md's
@@ -7,21 +10,36 @@ import { createAndPostBillPayment } from './purchasing'
  * payments, purchase orders, journal entries, payroll runs, budgets,
  * vendor/banking changes).
  *
- * Only bill payments are wired end-to-end as a reference implementation:
- * when a bill payment's amount is at or above its threshold, the payment
- * is NOT created or posted immediately — an Approval record is created
- * instead, carrying the parameters needed to create it later. Approving
- * it executes the payment for the first time; rejecting it never posts
- * anything. Other categories listed in APPROVAL_THRESHOLDS are defined
- * but not yet wired into their respective API routes — see
- * docs/known-limitations.md.
+ * Wired end-to-end as of this pass: bill payments, reimbursement payouts,
+ * purchase order issuance (draft -> sent), manual journal entries, and
+ * payroll run posting. For each, when the amount is at or above its
+ * threshold, the money-moving action is NOT executed immediately — an
+ * Approval record is created carrying the parameters needed to execute it
+ * later. Approving it executes the action for the first time; rejecting
+ * it never posts/commits anything. Budgets and vendor-banking-change
+ * approval categories are defined but not yet wired into their routes —
+ * see docs/known-limitations.md.
+ *
+ * Organizations can override any default threshold via
+ * Organization.approvalThresholds (see src/pages/api/settings/approval-
+ * thresholds.ts) — pass that JSON map as the third argument to
+ * amountRequiresApproval when available.
  */
 export const APPROVAL_THRESHOLDS: Record<string, number> = {
   'bill-payment': 500,
+  'reimbursement-payment': 500,
+  'purchase-order': 1000,
+  'journal-entry': 1000,
+  'payroll-run': 0,
 }
 
-export function amountRequiresApproval(resourceType: string, amount: number): boolean {
-  const threshold = APPROVAL_THRESHOLDS[resourceType]
+export function amountRequiresApproval(
+  resourceType: string,
+  amount: number,
+  orgThresholds?: Record<string, unknown> | null
+): boolean {
+  const override = orgThresholds && typeof orgThresholds[resourceType] === 'number' ? (orgThresholds[resourceType] as number) : undefined
+  const threshold = override ?? APPROVAL_THRESHOLDS[resourceType]
   if (threshold == null) return false
   return amount >= threshold
 }
@@ -60,13 +78,49 @@ export async function requestApproval(
   return approval
 }
 
-/** Executes the pending action for an approved approval. Only 'bill-payment' is implemented. */
+/** Executes the pending action for an approved approval. */
 async function executeApprovedAction(tx: any, approval: any, actorId: string) {
   if (approval.resourceType === 'bill-payment') {
     const bill = await tx.bill.findUnique({ where: { id: approval.resourceId } })
     if (!bill) throw new Error('Bill for this approval no longer exists')
     return createAndPostBillPayment(tx, bill, approval.payload as any, actorId)
   }
+
+  if (approval.resourceType === 'reimbursement-payment') {
+    const reimbursement = await tx.reimbursement.findUnique({ where: { id: approval.resourceId } })
+    if (!reimbursement) throw new Error('Reimbursement for this approval no longer exists')
+    if (reimbursement.status === 'paid') return reimbursement
+    const payload = approval.payload as { paymentAccountId: string }
+    await tx.reimbursement.update({ where: { id: reimbursement.id }, data: { paymentAccountId: payload.paymentAccountId } })
+    const withLines = await tx.reimbursement.findUnique({ where: { id: reimbursement.id }, include: { lines: true } })
+    await postReimbursementToLedger(tx, withLines, actorId)
+    return tx.reimbursement.findUnique({ where: { id: reimbursement.id } })
+  }
+
+  if (approval.resourceType === 'purchase-order') {
+    const po = await tx.purchaseOrder.findUnique({ where: { id: approval.resourceId } })
+    if (!po) throw new Error('Purchase order for this approval no longer exists')
+    if (po.status !== 'draft') return po
+    return tx.purchaseOrder.update({ where: { id: po.id }, data: { status: 'sent' } })
+  }
+
+  if (approval.resourceType === 'journal-entry') {
+    const entry = approval.payload as JournalEntry
+    return postJournalEntryTx(tx, entry, actorId)
+  }
+
+  if (approval.resourceType === 'payroll-run') {
+    const payRun = await tx.payRun.findUnique({ where: { id: approval.resourceId } })
+    if (!payRun) throw new Error('Pay run for this approval no longer exists')
+    if (payRun.status !== 'draft') return tx.payRun.findUnique({ where: { id: payRun.id }, include: { lines: { include: { employee: true } } } })
+    const entry = await postPayRunToLedger(tx, payRun, actorId)
+    return tx.payRun.update({
+      where: { id: payRun.id },
+      data: { status: 'posted', journalEntryId: entry.id, postedAt: new Date() },
+      include: { lines: { include: { employee: true } } },
+    })
+  }
+
   return null
 }
 

@@ -95,6 +95,17 @@
   receipt upload link). See [known-limitations.md](known-limitations.md)
   for the honest scope boundary of each (most of these have no
   dedicated UI page yet — API-complete only).
+- **Approval gating expansion**: extended the Approval Center beyond
+  bill payments to reimbursement payouts, purchase order issuance
+  (draft → sent), manual journal entries, and payroll run posting —
+  each checked against a per-organization configurable threshold
+  (`Organization.approvalThresholds`, falling back to
+  `APPROVAL_THRESHOLDS` defaults). Also fixed a missing tenant-membership
+  check on `POST /api/ledger/post` (any authenticated user could
+  previously post to any organization's ledger by supplying its
+  `organizationId`) and refactored `src/lib/ledger.ts` to expose a
+  transaction-scoped `postJournalEntryTx` so the approvals executor can
+  post an approved journal entry without opening a nested transaction.
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -111,9 +122,8 @@
   `src/lib/analytics.ts` is wired but inert until a vendor is chosen).
 - Live exchange-rate provider (currently manual entry only).
 - Approver-role restriction on the Approval Center (currently any
-  organization member can approve/reject); expanding approval
-  thresholds beyond bill payments (e.g. reimbursements, purchase
-  orders, journal entries, payroll runs).
+  organization member can approve/reject); extending approval gating to
+  budgets and vendor/banking-detail changes.
 - Object storage for Documents (currently local disk — see
   [security-notes.md](security-notes.md)).
 - Dedicated unit tests for the Phase 5/6/7 domain modules (approvals,

@@ -15,9 +15,11 @@ type Approval = {
 }
 
 /**
- * Approval Center: shows pending sign-offs on sensitive actions (currently
- * only bill payments at or above $500 — see src/lib/approvals.ts for the
- * full threshold table and which resource types are wired in).
+ * Approval Center: shows pending sign-offs on sensitive actions — bill
+ * payments, reimbursement payouts, purchase order issuance, manual
+ * journal entries, and payroll run posting — each gated by a configurable
+ * per-organization dollar threshold (Settings → approval thresholds). See
+ * src/lib/approvals.ts for the full threshold table and executor logic.
  */
 function ApprovalsContent() {
   const { token, currentOrg } = useAuth()

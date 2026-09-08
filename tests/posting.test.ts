@@ -13,6 +13,7 @@ describe('postJournalEntry behavior (mocked Prisma)', () => {
     const prismaMock: any = {
       journalEntry: { findUnique: vi.fn(async ({ where }: any) => existing), create: vi.fn() },
       auditEvent: { create: vi.fn() },
+      accountingPeriod: { findFirst: vi.fn(async () => null) },
       $transaction: vi.fn(async (fn: any) => {
         return fn(prismaMock)
       })
@@ -29,6 +30,7 @@ describe('postJournalEntry behavior (mocked Prisma)', () => {
     const prismaMock: any = {
       journalEntry: { findUnique: vi.fn(async () => null), create: vi.fn(async () => created) },
       auditEvent: { create: vi.fn() },
+      accountingPeriod: { findFirst: vi.fn(async () => null) },
       $transaction: vi.fn(async (fn: any) => fn(prismaMock))
     }
     const ctx: any = { prisma: prismaMock, actorId: 'actor' }

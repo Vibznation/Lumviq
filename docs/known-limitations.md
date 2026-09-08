@@ -70,11 +70,16 @@ explicit scope boundaries so no feature is misrepresented.
   code.
 
 ## Approvals (pending-action gating)
-- Only bill payments at or above $500 are gated behind approval today
-  (`APPROVAL_THRESHOLDS` in `src/lib/approvals.ts`). Expenses, purchase
-  orders, journal entries, payroll runs and vendor/banking-detail changes
-  are **not** yet gated — they post/save immediately regardless of
-  amount.
+- Bill payments, reimbursement payouts, purchase order issuance (draft →
+  sent), manual journal entries, and payroll run posting are gated behind
+  approval when their amount is at or above a configurable threshold
+  (`APPROVAL_THRESHOLDS` defaults in `src/lib/approvals.ts`, overridable
+  per organization via Settings → approval thresholds /
+  `Organization.approvalThresholds`). Payroll runs default to a $0
+  threshold (every run requires sign-off) since payroll moves real money
+  to employees without a preview step elsewhere in the app. Budgets and
+  vendor-banking-detail changes are **not** yet gated — they save
+  immediately regardless of amount.
 - Any organization member can decide (approve/reject) a pending
   approval — there is no "approver" role restriction yet. See
   [permissions-matrix.md](permissions-matrix.md).

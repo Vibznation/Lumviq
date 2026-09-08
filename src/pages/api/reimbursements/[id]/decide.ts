@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { postReimbursementToLedger } from '../../../../lib/reimbursements'
+import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -37,6 +38,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const account = await prisma.account.findUnique({ where: { id: paymentAccountId } })
   if (!account || account.organizationId !== reimbursement.organizationId) {
     return res.status(400).json({ error: 'Payment account does not belong to this organization' })
+  }
+
+  const org = await prisma.organization.findUnique({ where: { id: reimbursement.organizationId } })
+  if (amountRequiresApproval('reimbursement-payment', Number(reimbursement.amount), org?.approvalThresholds as any)) {
+    const approval = await prisma.$transaction((tx) =>
+      requestApproval(tx, {
+        organizationId: reimbursement.organizationId,
+        resourceType: 'reimbursement-payment',
+        resourceId: reimbursement.id,
+        amount: reimbursement.amount.toString(),
+        payload: { paymentAccountId },
+        requestedByUserId: user.id,
+        note: `Reimbursement for ${reimbursement.payeeName}`,
+      })
+    )
+    return res.status(202).json({ requiresApproval: true, approval })
   }
 
   const result = await prisma.$transaction(async (tx) => {

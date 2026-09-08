@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
+import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -18,6 +19,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!['draft', 'sent', 'received', 'closed'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' })
     }
+
+    if (status === 'sent' && po.status === 'draft') {
+      const org = await prisma.organization.findUnique({ where: { id: po.organizationId } })
+      if (amountRequiresApproval('purchase-order', Number(po.total), org?.approvalThresholds as any)) {
+        const approval = await prisma.$transaction((tx) =>
+          requestApproval(tx, {
+            organizationId: po.organizationId,
+            resourceType: 'purchase-order',
+            resourceId: po.id,
+            amount: po.total.toString(),
+            payload: {},
+            requestedByUserId: user.id,
+            note: `Purchase order ${po.poNumber} to ${po.vendor?.name || 'vendor'}`,
+          })
+        )
+        return res.status(202).json({ requiresApproval: true, approval })
+      }
+    }
+
     const updated = await prisma.purchaseOrder.update({ where: { id }, data: { status } })
     return res.status(200).json(updated)
   }

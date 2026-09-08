@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { postPayRunToLedger } from '../../../../lib/payroll'
+import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -15,6 +16,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (payRun.status !== 'draft') return res.status(400).json({ error: 'Only draft pay runs can be posted' })
 
   try {
+    const org = await prisma.organization.findUnique({ where: { id: payRun.organizationId } })
+    const total = Number(payRun.totalNetPay) + Number(payRun.totalEmployerTax)
+    if (amountRequiresApproval('payroll-run', total, org?.approvalThresholds as any)) {
+      const approval = await prisma.$transaction((tx) =>
+        requestApproval(tx, {
+          organizationId: payRun.organizationId,
+          resourceType: 'payroll-run',
+          resourceId: payRun.id,
+          amount: total,
+          payload: {},
+          requestedByUserId: user.id,
+          note: `Pay run ${payRun.payPeriodStart.toISOString().slice(0, 10)} – ${payRun.payPeriodEnd.toISOString().slice(0, 10)}`,
+        })
+      )
+      return res.status(202).json({ requiresApproval: true, approval })
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const entry = await postPayRunToLedger(tx, payRun, user.id)
       const updated = await tx.payRun.update({

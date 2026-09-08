@@ -36,7 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    if (amountRequiresApproval('bill-payment', Number(amount))) {
+    const org = await prisma.organization.findUnique({ where: { id: bill.organizationId } })
+    if (amountRequiresApproval('bill-payment', Number(amount), org?.approvalThresholds as any)) {
       const approval = await prisma.$transaction((tx) =>
         requestApproval(tx, {
           organizationId: bill.organizationId,
