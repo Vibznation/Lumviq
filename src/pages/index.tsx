@@ -4,7 +4,6 @@ import { useRouter } from 'next/router'
 import MarketingLayout from '../components/marketing/MarketingLayout'
 import ProductTour from '../components/marketing/ProductTour'
 import PricingCard from '../components/marketing/PricingCard'
-import FAQAccordion from '../components/marketing/FAQAccordion'
 import { brand } from '../lib/brand'
 import { useAuth } from '../lib/auth-context'
 import { track } from '../lib/analytics'
@@ -97,13 +96,15 @@ export default function Home() {
 
 
       {/* Trust strip */}
-      <Section className="py-10 border-t border-gray-100 dark:border-midnight-900">
-        <ul className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-          {TRUST_STATEMENTS.map((t) => (
-            <li key={t} className="text-sm font-medium text-gray-600 dark:text-gray-400">{t}</li>
-          ))}
-        </ul>
-      </Section>
+      <div className="bg-teal-50/60 dark:bg-midnight-900/60 border-y border-teal-100 dark:border-midnight-800">
+        <Section className="py-8">
+          <ul className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+            {TRUST_STATEMENTS.map((t) => (
+              <li key={t} className="text-sm font-medium text-midnight-700 dark:text-gray-300">{t}</li>
+            ))}
+          </ul>
+        </Section>
+      </div>
 
       {/* Value pillars */}
       <Section>
@@ -112,7 +113,7 @@ export default function Home() {
         </h2>
         <div className="mt-10 grid md:grid-cols-2 lg:grid-cols-4 gap-6">
           {VALUE_PILLARS.map((v) => (
-            <div key={v.title} className="rounded-xl border border-gray-200 dark:border-midnight-800 p-6">
+            <div key={v.title} className="rounded-xl border border-gray-200 dark:border-midnight-800 border-t-4 border-t-teal-500 p-6">
               <h3 className="font-semibold text-midnight-800 dark:text-white">{v.title}</h3>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{v.description}</p>
             </div>
@@ -121,9 +122,12 @@ export default function Home() {
       </Section>
 
       {/* Pricing preview */}
-      <Section className="border-t border-gray-100 dark:border-midnight-900">
-        <h2 className="text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white text-center">Plans for every stage</h2>
-        <div className="mt-10 grid md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <Section className="border-t border-gray-100 dark:border-midnight-900 text-center">
+        <span className="inline-flex items-center gap-2 rounded-full bg-gold-50 dark:bg-midnight-800 px-4 py-1.5 text-sm font-medium text-gold-700 dark:text-gold-400 ring-1 ring-inset ring-gold-200 dark:ring-midnight-700">
+          Simple, transparent pricing
+        </span>
+        <h2 className="mt-4 text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white">Plans for every stage</h2>
+        <div className="mt-10 grid md:grid-cols-3 lg:grid-cols-5 gap-4 text-left">
           {PLANS.map((p) => (
             <PricingCard key={p.id} plan={p} cycle="monthly" ctaHref="/pricing" ctaLabel={p.monthlyPrice === null ? 'Contact sales' : 'View plan'} />
           ))}
@@ -159,66 +163,66 @@ export default function Home() {
         </div>
       </Section>
 
-      {/* Integrations */}
+      {/* Explore more: integrations, security, and FAQ as linked cards */}
       <Section className="border-t border-gray-100 dark:border-midnight-900">
-        <h2 className="text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white text-center">Connects with the tools you already use</h2>
-        <div className="mt-10 grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {INTEGRATION_CATEGORIES.map((c) => (
-            <div key={c.category} className="rounded-lg border border-gray-200 dark:border-midnight-800 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-medium text-midnight-800 dark:text-white">{c.category}</h3>
-                <span className="text-[10px] uppercase tracking-wide text-gold-700 dark:text-gold-400 bg-gold-50 dark:bg-midnight-800 rounded-full px-2 py-0.5">
-                  Coming soon
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{c.examples.join(', ')}</p>
-            </div>
-          ))}
+        <h2 className="text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white text-center">Learn more</h2>
+        <div className="mt-10 grid sm:grid-cols-3 gap-6">
+          <Link
+            href="/integrations"
+            className="group rounded-xl border border-gray-200 dark:border-midnight-800 p-6 hover:border-teal-500 hover:shadow-lg transition-shadow"
+          >
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-300 text-lg" aria-hidden="true">&#8646;</span>
+            <h3 className="mt-4 font-semibold text-midnight-800 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">
+              Connects with the tools you already use
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{INTEGRATION_CATEGORIES.map((c) => c.category).join(', ')}</p>
+            <span className="mt-4 inline-block text-sm font-medium text-teal-700 dark:text-teal-400">See integrations &rarr;</span>
+          </Link>
+
+          <Link
+            href="/security"
+            className="group rounded-xl border border-gray-200 dark:border-midnight-800 p-6 hover:border-teal-500 hover:shadow-lg transition-shadow"
+          >
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-midnight-50 dark:bg-midnight-800 text-midnight-700 dark:text-teal-300 text-lg" aria-hidden="true">&#128274;</span>
+            <h3 className="mt-4 font-semibold text-midnight-800 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">
+              Security you can verify
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{SECURITY_HIGHLIGHTS.slice(0, 2).join(' · ')}</p>
+            <span className="mt-4 inline-block text-sm font-medium text-teal-700 dark:text-teal-400">Read the security overview &rarr;</span>
+          </Link>
+
+          <Link
+            href="/pricing#faq"
+            className="group rounded-xl border border-gray-200 dark:border-midnight-800 p-6 hover:border-teal-500 hover:shadow-lg transition-shadow"
+          >
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gold-50 dark:bg-midnight-800 text-gold-700 dark:text-gold-400 text-lg" aria-hidden="true">?</span>
+            <h3 className="mt-4 font-semibold text-midnight-800 dark:text-white group-hover:text-teal-700 dark:group-hover:text-teal-300">
+              Frequently asked questions
+            </h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{FAQ_ITEMS.slice(0, 1).map((f) => f.question)}</p>
+            <span className="mt-4 inline-block text-sm font-medium text-teal-700 dark:text-teal-400">Browse the FAQ &rarr;</span>
+          </Link>
         </div>
-        <p className="text-center mt-6">
-          <Link href="/integrations" className="text-teal-700 dark:text-teal-400 font-medium hover:underline">
-            See all integration categories &rarr;
-          </Link>
-        </p>
-      </Section>
-
-      {/* Security */}
-      <Section className="border-t border-gray-100 dark:border-midnight-900">
-        <h2 className="text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white text-center">Security you can verify</h2>
-        <ul className="mt-10 grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {SECURITY_HIGHLIGHTS.map((s) => (
-            <li key={s} className="rounded-lg border border-gray-200 dark:border-midnight-800 p-4 text-sm text-gray-700 dark:text-gray-300">
-              {s}
-            </li>
-          ))}
-        </ul>
-        <p className="text-center mt-6">
-          <Link href="/security" className="text-teal-700 dark:text-teal-400 font-medium hover:underline">
-            Read the full security overview &rarr;
-          </Link>
-        </p>
-      </Section>
-
-      {/* FAQ */}
-      <Section className="border-t border-gray-100 dark:border-midnight-900 max-w-3xl">
-        <h2 className="text-2xl md:text-3xl font-semibold text-midnight-900 dark:text-white text-center mb-6">
-          Frequently asked questions
-        </h2>
-        <FAQAccordion items={FAQ_ITEMS} />
       </Section>
 
       {/* Final CTA */}
-      <Section className="border-t border-gray-100 dark:border-midnight-900 text-center py-20">
-        <h2 className="text-3xl font-semibold text-midnight-900 dark:text-white">Your financial picture starts here.</h2>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/signup" className="rounded-md bg-teal-600 text-white px-6 py-3 font-medium hover:bg-teal-700">
-            Start Free
-          </Link>
-          <Link href="/compare" className="rounded-md border border-gray-300 dark:border-midnight-700 px-6 py-3 font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">
-            Compare Plans
-          </Link>
-        </div>
-      </Section>
+      <section className="relative overflow-hidden bg-gradient-to-br from-midnight-900 via-midnight-800 to-teal-900">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,196,174,0.3),transparent_45%),radial-gradient(circle_at_10%_80%,rgba(234,171,48,0.2),transparent_40%)]"
+        />
+        <Section className="relative text-center py-20">
+          <h2 className="text-3xl font-semibold text-white">Your financial picture starts here.</h2>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/signup" className="rounded-md bg-teal-500 text-midnight-950 px-6 py-3 font-semibold shadow-lg shadow-teal-500/20 hover:bg-teal-400">
+              Start Free
+            </Link>
+            <Link href="/compare" className="rounded-md border border-white/30 px-6 py-3 font-medium text-white hover:bg-white/10">
+              Compare Plans
+            </Link>
+          </div>
+        </Section>
+      </section>
     </MarketingLayout>
   )
 }

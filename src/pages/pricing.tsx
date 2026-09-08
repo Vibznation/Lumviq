@@ -158,7 +158,7 @@ export default function PricingPage() {
         </div>
       </section>
 
-      <section className="max-w-3xl mx-auto px-4 pb-20">
+      <section id="faq" className="max-w-3xl mx-auto px-4 pb-20 scroll-mt-24">
         <h2 className="text-2xl font-semibold text-midnight-900 dark:text-white text-center mb-6">Pricing questions</h2>
         <FAQAccordion items={FAQ_ITEMS} />
       </section>
