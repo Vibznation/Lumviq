@@ -40,7 +40,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    const withAccount = await tx.reimbursement.update({ where: { id }, data: { paymentAccountId } })
+    await tx.reimbursement.update({ where: { id }, data: { paymentAccountId } })
+    const withAccount = await tx.reimbursement.findUnique({ where: { id }, include: { lines: true } })
     await postReimbursementToLedger(tx, withAccount, user.id)
     return tx.reimbursement.findUnique({ where: { id } })
   })

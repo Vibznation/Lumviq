@@ -17,6 +17,35 @@ export async function findPayableAccount(tx: any, organizationId: string) {
 }
 
 /**
+ * Flags likely duplicate bills: same vendor, same total, issued within 7
+ * days of each other, or a matching vendorReference. Non-blocking — the
+ * caller surfaces this as a warning, it never prevents bill creation.
+ */
+export async function findPotentialDuplicateBills(
+  tx: any,
+  params: { organizationId: string; vendorId: string; total: string; issueDate: Date; vendorReference?: string | null }
+) {
+  const windowStart = new Date(params.issueDate)
+  windowStart.setDate(windowStart.getDate() - 7)
+  const windowEnd = new Date(params.issueDate)
+  windowEnd.setDate(windowEnd.getDate() + 7)
+
+  return tx.bill.findMany({
+    where: {
+      organizationId: params.organizationId,
+      vendorId: params.vendorId,
+      OR: [
+        { total: params.total, issueDate: { gte: windowStart, lte: windowEnd } },
+        ...(params.vendorReference ? [{ vendorReference: params.vendorReference }] : []),
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 5,
+  })
+}
+
+
+/**
  * Posts a bill to the ledger. Idempotent: if the bill already has a
  * journalEntryId, the existing entry is returned unchanged. Lines that
  * reference a tracked inventory product increase stock on hand at the

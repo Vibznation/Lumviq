@@ -69,44 +69,71 @@
   Workflow automation, no compute/apply step for Budget scenarios, no
   ticket-status transitions for Support).
 
+- **Phase 7 expansion**: a durable DB-backed background job queue
+  (`BackgroundJob` table, `src/lib/jobs.ts`, processed via
+  `POST /api/jobs/process` for an external cron to call); real outbound
+  email via SMTP (`src/lib/integrations/email.ts`, honest log-only
+  fallback, every attempt recorded in `EmailLog`) wired into the
+  organization-invite flow; real signed HTTP webhook delivery
+  (`src/lib/webhooks.ts`) dispatched asynchronously through the job
+  queue instead of only being logged; account reconciliation for any
+  balance-sheet account with a line-clearing workflow
+  (`src/lib/account-reconciliation.ts`); a period close checklist
+  (`src/lib/close-checklist.ts`); a fixed asset register with
+  straight-line depreciation posting (`src/lib/fixed-assets.ts`); a
+  loan/amortization module with payment posting
+  (`src/lib/loans.ts`); three-way PO matching (order vs. receipt vs.
+  bill, `src/lib/three-way-match.ts`) and non-blocking duplicate-bill
+  detection; multi-line expense reports on Reimbursements
+  (`ReimbursementLine`); a Budget scenario compute/apply engine that
+  projects and can materialize a new budget from a scenario's
+  adjustments (`src/lib/budget-scenarios.ts`); intercompany
+  transactions with due-to/due-from posting on both organizations and a
+  consolidated trial balance with elimination netting
+  (`src/lib/consolidation.ts`); and time-limited guest self-service
+  portals for customers (view-only invoice link) and vendors (bill/
+  receipt upload link). See [known-limitations.md](known-limitations.md)
+  for the honest scope boundary of each (most of these have no
+  dedicated UI page yet — API-complete only).
+
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
   existing `BankFeedProvider` interface.
 - Real payment processor integration (Stripe or similar) behind the
   existing `PaymentProcessor` interface, for collecting invoice payments
-  online.
+  online (this would also enable online payment on the customer invoice
+  portal, which is currently view-only).
 - Receipt/bill OCR provider behind the existing `OcrProvider` interface.
 - Payroll tax withholding/filing and direct deposit via a licensed
   payroll provider integration (e.g., Check, Gusto embedded).
 - Scheduled/cached report generation for large datasets.
-- Three-way PO matching (purchase order → receipt → bill).
-- A real payment processor behind Lumviq Payments and a licensed payroll
-  provider behind the Payroll add-ons (both currently priced/configured
-  but not connected to a live provider — see honest-disclaimer copy on
-  `/pricing`).
 - Analytics vendor + cookie-consent banner (the `track()` helper in
   `src/lib/analytics.ts` is wired but inert until a vendor is chosen).
 - Live exchange-rate provider (currently manual entry only).
-- Real outbound webhook delivery (currently logs deliveries but does not
-  perform the HTTP call — no public API emits real events yet).
 - Approver-role restriction on the Approval Center (currently any
-  organization member can approve/reject).
+  organization member can approve/reject); expanding approval
+  thresholds beyond bill payments (e.g. reimbursements, purchase
+  orders, journal entries, payroll runs).
 - Object storage for Documents (currently local disk — see
   [security-notes.md](security-notes.md)).
-- Dedicated unit tests for the Phase 5 domain modules (approvals,
+- Dedicated unit tests for the Phase 5/6/7 domain modules (approvals,
   documents, notifications, currency, dimensions, contractors,
-  nonprofit, import-export, webhooks).
+  nonprofit, import-export, webhooks, estimates, purchase orders,
+  vendor credits, reimbursements, recurring templates, roles/
+  permissions, custom fields, workflows, budget scenarios, KPIs,
+  support tickets, jobs, email, account reconciliation, close
+  checklist, fixed assets, loans, three-way match, consolidation).
 - FIFO/LIFO inventory costing options (currently average-cost only).
-- Dedicated unit tests for the Phase 6 domain modules (estimates,
-  purchase orders, vendor credits, reimbursements, recurring templates,
-  roles/permissions, custom fields, workflows, budget scenarios, KPIs,
-  support tickets).
-- A compute/apply step for Budget scenarios that projects a new budget
-  from a scenario's percentage adjustments, rather than only storing
-  them.
 - A background scheduler (or documented external cron pattern) to run
-  Workflow automation rules automatically instead of only on-demand.
+  Workflow automation rules and the `/api/jobs/process` queue
+  automatically instead of only on-demand.
 - Ticket-status transitions (e.g. resolve/close) for Support tickets,
   and per-organization role scoping so custom role names don't collide
   globally.
+- Dedicated UI pages for account reconciliation, close checklist, fixed
+  assets, loans, budget scenario run, and intercompany transactions
+  (all API-complete, no frontend yet).
+- Bill-line-to-PO-line matching by a real foreign key instead of
+  description-text matching, for accurate three-way match results.
+- Multi-level (grandchild) consolidation hierarchies.
 

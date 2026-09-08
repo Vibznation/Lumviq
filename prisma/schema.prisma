@@ -83,6 +83,14 @@ model Organization {
   kpiDefinitions KpiDefinition[]
   budgetScenarios BudgetScenario[]
   supportTickets SupportTicket[]
+  accountReconciliations AccountReconciliation[]
+  closeChecklistItems CloseChecklistItem[]
+  fixedAssets    FixedAsset[]
+  loans          Loan[]
+  purchaseOrderReceipts PurchaseOrderReceipt[]
+  vendorUploadTokens VendorUploadToken[]
+  intercompanyOwned      IntercompanyTransaction[] @relation("IntercompanyOwner")
+  intercompanyCounterparty IntercompanyTransaction[] @relation("IntercompanyCounterparty")
 
   parentOrganization   Organization?  @relation("OrganizationHierarchy", fields: [parentOrganizationId], references: [id], onDelete: SetNull)
   childOrganizations   Organization[] @relation("OrganizationHierarchy")
@@ -151,6 +159,7 @@ model Account {
   invoiceLines   InvoiceLine[]
   billLines      BillLine[]
   budgets        Budget[]
+  accountReconciliations AccountReconciliation[]
 
   @@map("accounts")
 }
@@ -182,10 +191,13 @@ model JournalLine {
   amount        Decimal      @db.Decimal(20, 6)
   isDebit       Boolean      @map("is_debit")
   dimensionValueId String?   @map("dimension_value_id")
+  accountReconciliationId String? @map("account_reconciliation_id")
+  clearedAt     DateTime?    @map("cleared_at")
 
   journalEntry  JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   account       Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
   dimensionValue DimensionValue? @relation(fields: [dimensionValueId], references: [id], onDelete: SetNull)
+  accountReconciliation AccountReconciliation? @relation("JournalLineAccountReconciliation", fields: [accountReconciliationId], references: [id], onDelete: SetNull)
 
   @@map("journal_lines")
 }
@@ -211,6 +223,7 @@ model AccountingPeriod {
   isClosed       Boolean     @default(false) @map("is_closed")
 
   fiscalYear     FiscalYear  @relation(fields: [fiscalYearId], references: [id], onDelete: Cascade)
+  closeChecklistItems CloseChecklistItem[]
 
   @@map("accounting_periods")
 }
@@ -403,6 +416,7 @@ model Vendor {
   contractors    Contractor[]
   purchaseOrders PurchaseOrder[]
   vendorCredits  VendorCredit[]
+  uploadTokens   VendorUploadToken[]
 
   @@map("vendors")
 }
@@ -987,6 +1001,7 @@ model PurchaseOrder {
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   vendor         Vendor        @relation(fields: [vendorId], references: [id], onDelete: Restrict)
   lines          PurchaseOrderLine[]
+  receipts       PurchaseOrderReceipt[]
 
   @@unique([organizationId, poNumber])
   @@map("purchase_orders")
@@ -1064,6 +1079,7 @@ model Reimbursement {
   createdAt        DateTime  @default(now()) @map("created_at")
 
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lines            ReimbursementLine[]
 
   @@map("reimbursements")
 }
@@ -1240,6 +1256,262 @@ model SupportTicket {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@map("support_tickets")
+}
+
+/// Durable background job queue. Recurring templates, workflow rules,
+/// webhook deliveries and outbound emails all enqueue work here instead of
+/// executing inline, so retries/backoff/failure visibility are consistent.
+/// Processing happens when POST /api/jobs/process is called (see
+/// docs/deployment.md for wiring an external scheduler/cron to that
+/// endpoint) — there is no in-process timer, matching the rest of
+/// Lumviq's "no hidden background magic" posture.
+model BackgroundJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @map("organization_id")
+  type           String
+  payload        Json
+  status         String    @default("pending")
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5) @map("max_attempts")
+  runAt          DateTime  @default(now()) @map("run_at")
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@map("background_jobs")
+}
+
+/// Record of every outbound email Lumviq attempted to send. When no
+/// provider is configured (see src/lib/integrations/email.ts) the email is
+/// only logged here, never actually delivered — status stays "logged_only".
+model EmailLog {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String?   @map("organization_id")
+  toAddress      String    @map("to_address")
+  subject        String
+  body           String
+  provider       String
+  status         String    @default("logged_only")
+  error          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("email_logs")
+}
+
+/// Reconciliation of any general-ledger balance-sheet account against an
+/// external statement/subledger figure (distinct from bank-feed
+/// ReconciliationSession, which only covers bank/credit-card accounts).
+model AccountReconciliation {
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id")
+  accountId         String    @map("account_id")
+  periodEndDate     DateTime  @map("period_end_date")
+  statementBalance  Decimal   @db.Decimal(20, 6) @map("statement_balance")
+  glBalance         Decimal   @db.Decimal(20, 6) @map("gl_balance")
+  status            String    @default("in_progress")
+  notes             String?
+  reconciledByUserId String?  @map("reconciled_by_user_id")
+  completedAt       DateTime? @map("completed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account           Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  clearedLines      JournalLine[] @relation("JournalLineAccountReconciliation")
+
+  @@map("account_reconciliations")
+}
+
+/// A single task on an accounting period's close checklist (e.g. "Reconcile
+/// operating bank account", "Post depreciation", "Review AR aging").
+model CloseChecklistItem {
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationId     String    @map("organization_id")
+  accountingPeriodId String    @map("accounting_period_id")
+  label              String
+  status             String    @default("pending")
+  assignedToUserId   String?   @map("assigned_to_user_id")
+  notes              String?
+  completedAt        DateTime? @map("completed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountingPeriod   AccountingPeriod @relation(fields: [accountingPeriodId], references: [id], onDelete: Cascade)
+
+  @@map("close_checklist_items")
+}
+
+/// Fixed asset register entry. Depreciation is straight-line only —
+/// see docs/known-limitations.md for other methods not yet supported.
+model FixedAsset {
+  id                          String    @id @default(uuid()) @db.Uuid
+  organizationId              String    @map("organization_id")
+  name                        String
+  assetAccountId              String    @map("asset_account_id")
+  depreciationExpenseAccountId String   @map("depreciation_expense_account_id")
+  accumulatedDepreciationAccountId String @map("accumulated_depreciation_account_id")
+  acquisitionDate             DateTime  @map("acquisition_date")
+  cost                        Decimal   @db.Decimal(20, 6)
+  salvageValue                Decimal   @default(0) @db.Decimal(20, 6) @map("salvage_value")
+  usefulLifeMonths            Int       @map("useful_life_months")
+  method                      String    @default("straight_line")
+  disposedAt                  DateTime? @map("disposed_at")
+  disposalAmount              Decimal?  @db.Decimal(20, 6) @map("disposal_amount")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+
+  organization                Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  depreciationEntries         DepreciationEntry[]
+
+  @@map("fixed_assets")
+}
+
+model DepreciationEntry {
+  id             String    @id @default(uuid()) @db.Uuid
+  fixedAssetId   String    @map("fixed_asset_id")
+  periodDate     DateTime  @map("period_date")
+  amount         Decimal   @db.Decimal(20, 6)
+  journalEntryId String?   @unique @map("journal_entry_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  fixedAsset     FixedAsset @relation(fields: [fixedAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([fixedAssetId, periodDate])
+  @@map("depreciation_entries")
+}
+
+/// Loan/debt register with an amortization schedule. Interest/principal
+/// split uses a standard amortizing-loan formula.
+model Loan {
+  id                     String    @id @default(uuid()) @db.Uuid
+  organizationId         String    @map("organization_id")
+  name                   String
+  lenderName             String?   @map("lender_name")
+  liabilityAccountId     String    @map("liability_account_id")
+  interestExpenseAccountId String  @map("interest_expense_account_id")
+  disbursementAccountId  String?   @map("disbursement_account_id")
+  principal              Decimal   @db.Decimal(20, 6)
+  interestRatePercent    Decimal   @db.Decimal(8, 4) @map("interest_rate_percent")
+  termMonths             Int       @map("term_months")
+  startDate              DateTime  @map("start_date")
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  organization           Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payments               LoanPayment[]
+
+  @@map("loans")
+}
+
+model LoanPayment {
+  id               String    @id @default(uuid()) @db.Uuid
+  loanId           String    @map("loan_id")
+  paymentDate      DateTime  @map("payment_date")
+  amount           Decimal   @db.Decimal(20, 6)
+  principalPortion Decimal   @db.Decimal(20, 6) @map("principal_portion")
+  interestPortion  Decimal   @db.Decimal(20, 6) @map("interest_portion")
+  journalEntryId   String?   @unique @map("journal_entry_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  loan             Loan      @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@unique([loanId, paymentDate])
+  @@map("loan_payments")
+}
+
+/// Multi-line item on a Reimbursement, enabling full "expense report"
+/// style submissions (several expenses, one reimbursement request).
+/// When lines exist, Reimbursement.amount is kept as their sum.
+model ReimbursementLine {
+  id               String    @id @default(uuid()) @db.Uuid
+  reimbursementId  String    @map("reimbursement_id")
+  date             DateTime
+  description      String
+  amount           Decimal   @db.Decimal(20, 6)
+  expenseAccountId String    @map("expense_account_id")
+  documentId       String?   @map("document_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  reimbursement    Reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Cascade)
+
+  @@map("reimbursement_lines")
+}
+
+/// Goods receipt against a PurchaseOrder, enabling 3-way matching
+/// (purchase order vs. receipt vs. bill) before a bill is paid.
+model PurchaseOrderReceipt {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id")
+  purchaseOrderId String    @map("purchase_order_id")
+  receivedDate    DateTime  @map("received_date")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  lines           PurchaseOrderReceiptLine[]
+
+  @@map("purchase_order_receipts")
+}
+
+model PurchaseOrderReceiptLine {
+  id                      String    @id @default(uuid()) @db.Uuid
+  purchaseOrderReceiptId  String    @map("purchase_order_receipt_id")
+  purchaseOrderLineId     String    @map("purchase_order_line_id")
+  quantityReceived        Decimal   @db.Decimal(20, 6) @map("quantity_received")
+
+  purchaseOrderReceipt    PurchaseOrderReceipt @relation(fields: [purchaseOrderReceiptId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_order_receipt_lines")
+}
+
+/// Time-limited guest-access token letting a customer view/pay a single
+/// invoice without a Lumviq account (customer portal).
+model InvoicePortalToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  invoiceId      String    @map("invoice_id")
+  token          String    @unique
+  expiresAt      DateTime  @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("invoice_portal_tokens")
+}
+
+/// Time-limited guest-access token letting a vendor upload a bill/receipt
+/// for an organization without a Lumviq account (vendor portal).
+model VendorUploadToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  vendorId       String    @map("vendor_id")
+  token          String    @unique
+  expiresAt      DateTime  @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor         Vendor       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_upload_tokens")
+}
+
+/// Intercompany transaction between two linked organizations (parent/child
+/// per Organization.parentOrganizationId). Posts a due-to/due-from journal
+/// entry on each side and can be marked eliminated for consolidated
+/// reporting (see src/lib/consolidation.ts).
+model IntercompanyTransaction {
+  id                       String    @id @default(uuid()) @db.Uuid
+  organizationId           String    @map("organization_id")
+  counterpartyOrganizationId String  @map("counterparty_organization_id")
+  description              String?
+  amount                   Decimal   @db.Decimal(20, 6)
+  dueToAccountId           String    @map("due_to_account_id")
+  dueFromAccountId         String    @map("due_from_account_id")
+  journalEntryId           String?   @unique @map("journal_entry_id")
+  counterpartyJournalEntryId String? @unique @map("counterparty_journal_entry_id")
+  eliminated               Boolean   @default(false)
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  organization             Organization @relation("IntercompanyOwner", fields: [organizationId], references: [id], onDelete: Cascade)
+  counterpartyOrganization Organization @relation("IntercompanyCounterparty", fields: [counterpartyOrganizationId], references: [id], onDelete: Cascade)
+
+  @@map("intercompany_transactions")
 }
 
 

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
-import { computeBillTotals, nextBillNumber } from '../../../lib/purchasing'
+import { computeBillTotals, nextBillNumber, findPotentialDuplicateBills } from '../../../lib/purchasing'
 import { toMinorUnits, multiplyMinor, fromMinorUnits } from '../../../lib/money'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -100,7 +100,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     })
 
-    return res.status(201).json(bill)
+    return res.status(201).json({
+      ...bill,
+      potentialDuplicates: await findPotentialDuplicateBills(prisma, {
+        organizationId,
+        vendorId,
+        total: bill.total.toString(),
+        issueDate: bill.issueDate,
+        vendorReference: bill.vendorReference,
+      }).then((dupes: any[]) => dupes.filter((d) => d.id !== bill.id)),
+    })
   }
 
   res.setHeader('Allow', 'GET, POST')

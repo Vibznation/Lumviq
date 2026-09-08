@@ -56,11 +56,31 @@ webhooks are an **outbound** integration point Lumviq itself exposes:
   (`generateWebhookSecret` / `signPayload`, both using Node's built-in
   `crypto` module).
 - `dispatchWebhookEvent(...)` records a `WebhookDelivery` row (status
-  `not_sent`) but **does not perform the actual HTTP call yet** — there
-  is no public API surface that emits real domain events
-  (`invoice.paid`, `bill.paid`, etc.) to trigger dispatch. This is
-  scaffolding for a future public API, not a working outbound webhook
-  system today.
+  `pending`) and enqueues a `webhook.delivery` background job
+  (`src/lib/jobs.ts`). `sendWebhookDelivery(...)` performs the real
+  signed HTTP POST (native `fetch`, `X-Lumviq-Signature` header) and
+  updates the delivery to `delivered`/`failed`. Delivery only actually
+  happens when something processes the job queue — see
+  "Background jobs" below. Existing `dispatchWebhookEvent` call sites
+  are unchanged from before; no new real-event emission points were
+  added alongside this delivery mechanism.
+
+## Background jobs — `src/lib/jobs.ts`
+A durable, DB-backed queue (`BackgroundJob` table) used for webhook
+delivery and outbound email. `enqueueJob(tx, params)` inserts a job;
+`POST /api/jobs/process` (auth: `JOBS_PROCESS_SECRET` bearer token or a
+logged-in user) calls `processDueJobs(...)` to run all due jobs once.
+**There is no in-process scheduler** — an external cron (e.g. a Vercel
+Cron Job) must call that endpoint periodically for jobs to actually run
+in production. Failed jobs retry with exponential backoff (1, 5, 15, 60,
+240 minutes) up to `maxAttempts` (default 5).
+
+## Email — `src/lib/integrations/email.ts`
+`sendEmail(message)` sends real SMTP mail via `nodemailer` only when
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` are configured; otherwise the message
+is logged only, never faked as delivered. Every attempt is recorded in
+the `EmailLog` table. Currently only the organization-invite flow uses
+this (`POST /api/orgs/invite`).
 
 ## Settings → Integrations page
 `src/pages/settings/integrations.tsx` always displays each of the three

@@ -153,12 +153,14 @@ explicit scope boundaries so no feature is misrepresented.
   pending `Approval`.
 
 ## Budget scenarios
-- A `BudgetScenario` stores a name and a JSON map of per-account
-  percentage adjustments (`prisma/schema.prisma`), but there is **no
-  compute/apply endpoint** — the app does not project a new budget from
-  a scenario's adjustments today. The Planning page only lets you
-  create and view scenarios; comparing a scenario's projected numbers
-  against actuals is not yet implemented.
+- A `BudgetScenario` stores a name and a JSON list of per-account
+  adjustments (percent or fixed-amount). `POST /api/budget-scenarios/[id]/run`
+  computes a projected month-by-month budget for a target year (baseline
+  is either the prior year's actuals or the existing `Budget` table,
+  depending on `basedOnActual`) and can materialize it into the `Budget`
+  table (`src/lib/budget-scenarios.ts`). There is **no UI page** for
+  running/applying a scenario yet — the Planning page only lets you
+  create and view scenarios; use the API directly until a UI is built.
 
 ## Support tickets
 - `/support` and `POST /api/support-tickets` are an **in-app ticket
@@ -178,12 +180,121 @@ explicit scope boundaries so no feature is misrepresented.
   method (`basis`) behind every answer.
 
 ## Webhooks
-- Outbound webhook subscriptions can be created and signed
-  (HMAC-SHA256) via `src/lib/webhooks.ts`, but deliveries are only
-  **logged**, not actually sent over HTTP — there is no public API
-  surface yet that emits real events (`invoice.paid`, `bill.paid`,
-  etc.) to trigger a dispatch. See
+- Outbound webhook subscriptions are created and signed (HMAC-SHA256,
+  `X-Lumviq-Signature` header) via `src/lib/webhooks.ts`. Deliveries are
+  now real HTTP POST requests, but they are **not sent synchronously** —
+  `dispatchWebhookEvent` enqueues a `webhook.delivery` background job
+  (`BackgroundJob` table), which is only processed when something calls
+  `POST /api/jobs/process` (see "Background jobs" below). Existing
+  `dispatchWebhookEvent` call sites are unchanged; no new real-event
+  emission points were added in this pass. See
   [integration-adapters.md](integration-adapters.md).
+
+## Background jobs
+- `src/lib/jobs.ts` implements a durable, DB-backed job queue
+  (`BackgroundJob` table) with exponential backoff (1, 5, 15, 60, 240
+  minutes across up to 5 attempts). **There is no in-process
+  scheduler/timer** — jobs are only processed when something calls
+  `POST /api/jobs/process` (auth: `JOBS_PROCESS_SECRET` bearer token or
+  a logged-in user). In production this endpoint must be invoked
+  periodically by an external scheduler (e.g. a Vercel Cron Job or any
+  cron-capable process) or queued jobs (webhook deliveries, invite
+  emails) will simply accumulate unprocessed.
+
+## Email delivery
+- `src/lib/integrations/email.ts` sends real email via SMTP
+  (`nodemailer`) only when `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` are set in
+  the environment; otherwise messages are logged only (never faked as
+  "sent"). Every attempt — success, failure, or log-only — is recorded
+  in the new `EmailLog` table. Currently only the organization-invite
+  flow (`POST /api/orgs/invite`) enqueues an email job; invoice-sent,
+  payment-reminder and approval-notification flows do **not** yet send
+  email.
+
+## Account reconciliation
+- `src/lib/account-reconciliation.ts` and
+  `/api/account-reconciliations/*` support reconciling **any**
+  balance-sheet account (not just bank accounts) against a statement
+  balance, with a line-clearing workflow. Completion is blocked unless
+  the cleared-line total matches the entered statement balance within
+  $0.01. There is **no dedicated UI page** yet — use the API directly.
+
+## Period close checklist
+- `src/lib/close-checklist.ts` and `/api/close-checklist/*` let an
+  organization create a checklist of close tasks for an
+  `AccountingPeriod` (8 default tasks, or custom labels) and track each
+  item's status/assignment/notes. There is **no UI page** yet, and
+  completing checklist items does **not** automatically close the
+  period — closing a period is still a separate, existing action.
+
+## Fixed assets & depreciation
+- `src/lib/fixed-assets.ts` and `/api/fixed-assets/*` support a fixed
+  asset register with **straight-line depreciation only** (no
+  declining-balance, units-of-production, or bonus/Section 179
+  depreciation). Posting one month of depreciation
+  (`POST /api/fixed-assets/[id]/depreciate`) is idempotent per
+  asset/period and stops automatically once accumulated depreciation
+  reaches cost minus salvage value. There is **no UI page** and no
+  automatic monthly scheduling — depreciation must be posted manually
+  (or via an external scheduler calling the API) for each period.
+
+## Loans
+- `src/lib/loans.ts` and `/api/loans/*` generate a standard amortization
+  schedule and post loan payments (principal + interest split) via
+  `POST /api/loans/[id]/pay`, which always posts the **next** unpaid
+  scheduled payment. There is no support for extra/prepayments,
+  variable-rate loans, or refinancing, and no UI page yet.
+
+## Three-way matching & duplicate bill detection
+- `src/lib/three-way-match.ts` and `/api/purchase-order-receipts/*`
+  record goods receipts against a purchase order and compare
+  ordered vs. received vs. billed quantities
+  (`GET /api/purchase-order-receipts/match`). Bill-line-to-PO-line
+  matching is done by **description text match only** (Bill has no
+  direct FK to a PurchaseOrderLine), so renamed/reworded lines won't
+  match correctly. This is a non-blocking check — it does not prevent
+  bill creation or payment.
+- `POST /api/bills` now also returns a non-blocking `potentialDuplicates`
+  list (same vendor + same total within a 7-day window, or a matching
+  vendor reference) — informational only, never blocks bill creation.
+
+## Multi-line expense reports
+- `Reimbursement` can now have multiple `ReimbursementLine` rows
+  (`POST /api/reimbursements/[id]/lines`), each with its own expense
+  account; the reimbursement's total `amount` is kept as the sum of its
+  lines. Payment posting (`src/lib/reimbursements.ts`) splits the debit
+  side per line when lines exist, falling back to the legacy
+  single-account behavior otherwise. There is no UI for adding lines
+  yet — use the API directly.
+
+## Intercompany transactions & consolidation
+- `src/lib/consolidation.ts` and `/api/intercompany-transactions/*`
+  post a real due-from/due-to journal entry on each side of a
+  parent/child organization pair (see `Organization.parentOrganizationId`).
+  Posting requires the caller to supply the "offset" account on each
+  side (e.g. cash or an expense/revenue account) — these offset accounts
+  are **not persisted** on the `IntercompanyTransaction` record, only
+  the due-to/due-from accounts are.
+- `GET /api/reports/consolidated` computes a consolidated trial balance
+  for a parent and its **direct children only** — multi-level
+  (grandchild) hierarchies are not supported. Marking a transaction
+  eliminated (`PATCH .../[id]` with `{ action: 'eliminate' }`) nets its
+  due-from/due-to balances out of the consolidated totals. No UI page
+  yet.
+
+## Customer & vendor self-service portals
+- `POST /api/invoices/[id]/portal-token` mints a time-limited guest link
+  (`/portal/invoices/[token]`) for view-only invoice access — **no
+  online payment** is available (no payment processor is configured;
+  see "Integrations" above), so the portal only displays invoice details
+  and directs the customer to contact the business directly.
+- `POST /api/vendors/[id]/upload-token` mints a time-limited guest link
+  (`/portal/vendor-uploads/[token]`) letting a vendor upload a bill/
+  receipt file without a Lumviq account; uploads are stored as a
+  `Document` (same local-disk storage caveats as the Documents section
+  above) and are **not** automatically turned into a draft `Bill` — a
+  staff member must still create the bill manually from the uploaded
+  file.
 
 ## Global command bar
 - Supports structured search across customers, vendors, invoices, bills
