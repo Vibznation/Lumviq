@@ -44,6 +44,25 @@ function applyAdjustment(baseline: number, adjustment: Adjustment | undefined): 
 }
 
 /**
+ * Normalizes a scenario's stored `adjustments` JSON into `Adjustment[]`.
+ * Accepts the canonical array shape documented above, and also a legacy
+ * `Record<accountId, percentValue>` map (as historically produced by the
+ * Planning page's scenario-creation form) for backward compatibility with
+ * scenarios created before the array shape was the only supported input.
+ */
+function normalizeAdjustments(raw: unknown): Adjustment[] {
+  if (Array.isArray(raw)) return raw as Adjustment[]
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw as Record<string, number>).map(([accountId, value]) => ({
+      accountId,
+      type: 'percent' as const,
+      value: Number(value),
+    }))
+  }
+  return []
+}
+
+/**
  * Computes the projected budget for every account referenced in the
  * scenario's adjustments, for every month of `year`. Read-only — does not
  * write to the database.
@@ -51,7 +70,7 @@ function applyAdjustment(baseline: number, adjustment: Adjustment | undefined): 
 export async function computeScenario(tx: any, params: { organizationId: string; scenarioId: string; year: number }): Promise<ScenarioMonthResult[]> {
   const scenario = await tx.budgetScenario.findUnique({ where: { id: params.scenarioId } })
   if (!scenario) throw new Error('Budget scenario not found')
-  const adjustments: Adjustment[] = scenario.adjustments as any
+  const adjustments = normalizeAdjustments(scenario.adjustments)
   const adjustmentsByAccount = new Map(adjustments.map((a) => [a.accountId, a]))
 
   const results: ScenarioMonthResult[] = []

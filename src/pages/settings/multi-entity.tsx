@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
@@ -79,12 +80,17 @@ function MultiEntityContent() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Multi-entity management</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {currentOrg?.name} — each organization keeps its own independent ledger. Figures below are shown
-          side-by-side, never merged into a single set of journal entries.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Multi-entity management</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {currentOrg?.name} — each organization keeps its own independent ledger. Figures below are shown
+            side-by-side, never merged into a single set of journal entries.
+          </p>
+        </div>
+        <Link href="/settings/intercompany-transactions" className="text-sm text-teal-700 dark:text-teal-400 hover:underline whitespace-nowrap">
+          Intercompany transactions
+        </Link>
       </div>
 
       {error && (

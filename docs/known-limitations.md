@@ -163,9 +163,11 @@ explicit scope boundaries so no feature is misrepresented.
   computes a projected month-by-month budget for a target year (baseline
   is either the prior year's actuals or the existing `Budget` table,
   depending on `basedOnActual`) and can materialize it into the `Budget`
-  table (`src/lib/budget-scenarios.ts`). There is **no UI page** for
-  running/applying a scenario yet — the Planning page only lets you
-  create and view scenarios; use the API directly until a UI is built.
+  table (`src/lib/budget-scenarios.ts`). The Planning page's Scenarios
+  tab now has "Preview"/"Apply to budget" buttons wired to this endpoint,
+  showing a baseline/projected-by-month table. The scenario-creation
+  form only supports percent-type adjustments (not fixed-amount); use
+  the API directly to create a fixed-amount adjustment.
 
 ## Support tickets
 - `/support` and `POST /api/support-tickets` are an **in-app ticket
@@ -275,18 +277,20 @@ explicit scope boundaries so no feature is misrepresented.
 
 ## Intercompany transactions & consolidation
 - `src/lib/consolidation.ts` and `/api/intercompany-transactions/*`
-  post a real due-from/due-to journal entry on each side of a
-  parent/child organization pair (see `Organization.parentOrganizationId`).
-  Posting requires the caller to supply the "offset" account on each
-  side (e.g. cash or an expense/revenue account) — these offset accounts
-  are **not persisted** on the `IntercompanyTransaction` record, only
-  the due-to/due-from accounts are.
+  (with a UI at `/settings/intercompany-transactions`) post a real
+  due-from/due-to journal entry on each side of a parent/child
+  organization pair (see `Organization.parentOrganizationId`). Posting
+  requires the caller to supply the "offset" account on each side (e.g.
+  cash or an expense/revenue account) — these offset accounts are **not
+  persisted** on the `IntercompanyTransaction` record, only the
+  due-to/due-from accounts are. Only direct parent/child pairs are valid
+  counterparties — two sibling organizations under the same parent
+  cannot record a transaction directly with each other.
 - `GET /api/reports/consolidated` computes a consolidated trial balance
   for a parent and its **direct children only** — multi-level
   (grandchild) hierarchies are not supported. Marking a transaction
   eliminated (`PATCH .../[id]` with `{ action: 'eliminate' }`) nets its
-  due-from/due-to balances out of the consolidated totals. No UI page
-  yet.
+  due-from/due-to balances out of the consolidated totals.
 
 ## Customer & vendor self-service portals
 - `POST /api/invoices/[id]/portal-token` mints a time-limited guest link

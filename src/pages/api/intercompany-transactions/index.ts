@@ -13,6 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
     const transactions = await prisma.intercompanyTransaction.findMany({
       where: { OR: [{ organizationId }, { counterpartyOrganizationId: organizationId }] },
+      include: {
+        organization: { select: { name: true } },
+        counterpartyOrganization: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     })
     return res.status(200).json(transactions)

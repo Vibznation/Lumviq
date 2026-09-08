@@ -127,6 +127,23 @@
   `organizationId`, only via `FiscalYear`) and `GET` single-record routes
   for `/api/fixed-assets/[id]` and `/api/loans/[id]`, which didn't
   previously exist.
+- **UI pages for budget scenario run and intercompany transactions**:
+  added a "Preview"/"Apply to budget" flow to the existing Scenarios tab
+  on `/planning` (calls `POST /api/budget-scenarios/[id]/run` and shows a
+  baseline/projected-by-month table), and a new
+  `/settings/intercompany-transactions` page (create form with a linked
+  -organization picker sourced from a new `GET /api/orgs/linked` route,
+  per-organization account dropdowns, and an "Eliminate" action), cross
+  -linked from `/settings/multi-entity` and `/settings/organization`.
+  Along the way, fixed a latent shape bug: `computeScenario` in
+  `src/lib/budget-scenarios.ts` expected `BudgetScenario.adjustments` to
+  always be an array of `{accountId, type, value}`, but the Planning
+  page's scenario-creation form had always saved it as a
+  `Record<accountId, percent>` object — this had never been caught
+  because no UI previously called the run endpoint. Added
+  backward-compatible normalization for both shapes plus a first unit
+  test file for this module (`tests/budget-scenarios.test.ts`).
+
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
   existing `BankFeedProvider` interface.
@@ -150,9 +167,10 @@
   documents, notifications, currency, dimensions, contractors,
   nonprofit, import-export, webhooks, estimates, purchase orders,
   vendor credits, reimbursements, recurring templates, roles/
-  permissions, custom fields, workflows, budget scenarios, KPIs,
-  support tickets, jobs, email, account reconciliation, close
-  checklist, fixed assets, loans, three-way match, consolidation).
+  permissions, custom fields, workflows, KPIs, support tickets, jobs,
+  email, account reconciliation, close checklist, fixed assets, loans,
+  three-way match, consolidation). `budget-scenarios.ts` now has a
+  first test file (`tests/budget-scenarios.test.ts`).
 - FIFO/LIFO inventory costing options (currently average-cost only).
 - A background scheduler (or documented external cron pattern) to run
   Workflow automation rules and the `/api/jobs/process` queue
@@ -160,8 +178,6 @@
 - Ticket-status transitions (e.g. resolve/close) for Support tickets,
   and per-organization role scoping so custom role names don't collide
   globally.
-- Dedicated UI pages for budget scenario run and intercompany
-  transactions (API-complete, no frontend yet).
 - Bill-line-to-PO-line matching by a real foreign key instead of
   description-text matching, for accurate three-way match results.
 - Multi-level (grandchild) consolidation hierarchies.

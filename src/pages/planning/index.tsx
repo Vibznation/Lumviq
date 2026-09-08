@@ -16,6 +16,7 @@ type BudgetRow = {
   variancePct: number | null
 }
 type Scenario = { id: string; name: string; basedOnActual: boolean; adjustments: Record<string, number>; createdAt: string }
+type ScenarioMonthResult = { accountId: string; month: number; baseline: number; projected: number }
 type Kpi = { id: string; name: string; accountIds: string[]; operation: string; targetValue: number | null; value: number }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -42,6 +43,9 @@ function PlanningContent() {
   const [scenarioForm, setScenarioForm] = useState({ name: '', basedOnActual: true, accountId: '', percent: '' })
   const [scenarioRows, setScenarioRows] = useState<Array<{ accountId: string; percent: string }>>([])
   const [submittingScenario, setSubmittingScenario] = useState(false)
+  const [runResults, setRunResults] = useState<Record<string, ScenarioMonthResult[]>>({})
+  const [runningId, setRunningId] = useState<string | null>(null)
+  const [applyMessage, setApplyMessage] = useState<string | null>(null)
 
   const [kpis, setKpis] = useState<Kpi[]>([])
   const [kpiForm, setKpiForm] = useState({ name: '', accountIds: [] as string[], operation: 'sum', targetValue: '' })
@@ -112,6 +116,54 @@ function PlanningContent() {
       setError(err.message)
     } finally {
       setSubmittingScenario(false)
+    }
+  }
+
+  async function handleComputeScenario(scenarioId: string) {
+    if (!currentOrg) return
+    setRunningId(scenarioId)
+    setError(null)
+    setApplyMessage(null)
+    try {
+      const res = await fetch(`/api/budget-scenarios/${scenarioId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ action: 'compute', year }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not compute scenario')
+      }
+      const results: ScenarioMonthResult[] = await res.json()
+      setRunResults((r) => ({ ...r, [scenarioId]: results }))
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRunningId(null)
+    }
+  }
+
+  async function handleApplyScenario(scenarioId: string) {
+    if (!currentOrg) return
+    setRunningId(scenarioId)
+    setError(null)
+    setApplyMessage(null)
+    try {
+      const res = await fetch(`/api/budget-scenarios/${scenarioId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ action: 'apply', year }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not apply scenario')
+      }
+      setApplyMessage(`Applied to the ${year} budget.`)
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRunningId(null)
     }
   }
 
@@ -194,7 +246,7 @@ function PlanningContent() {
           <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Budgeting & Planning</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
         </div>
-        {tab === 'Budget vs Actual' && (
+        {(tab === 'Budget vs Actual' || tab === 'Scenarios') && (
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
             {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
@@ -217,6 +269,10 @@ function PlanningContent() {
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
           {error}
         </div>
+      )}
+
+      {applyMessage && (
+        <div className="mb-4 text-sm text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">{applyMessage}</div>
       )}
 
       {tab === 'Budget vs Actual' && (
@@ -328,17 +384,72 @@ function PlanningContent() {
             <p className="text-sm text-gray-500">No scenarios yet.</p>
           ) : (
             <div className="space-y-3">
-              {scenarios.map((s) => (
-                <div key={s.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
-                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{s.name}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Based on {s.basedOnActual ? 'actuals' : 'budget'}</p>
-                  <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
-                    {Object.entries(s.adjustments || {}).map(([accountId, pct]) => (
-                      <li key={accountId}>{accountLabel(accountId)}: {pct as number > 0 ? '+' : ''}{pct as number}%</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+              {scenarios.map((s) => {
+                const results = runResults[s.id]
+                const totalsByMonth = results
+                  ? Array.from({ length: 12 }, (_, i) => {
+                      const monthResults = results.filter((r) => r.month === i + 1)
+                      return {
+                        month: i + 1,
+                        baseline: monthResults.reduce((sum, r) => sum + r.baseline, 0),
+                        projected: monthResults.reduce((sum, r) => sum + r.projected, 0),
+                      }
+                    })
+                  : []
+                return (
+                  <div key={s.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{s.name}</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Based on {s.basedOnActual ? 'actuals' : 'budget'}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleComputeScenario(s.id)}
+                          disabled={runningId === s.id}
+                          className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-xs font-medium hover:bg-gray-50 dark:hover:bg-midnight-800 disabled:opacity-50"
+                        >
+                          Preview {year}
+                        </button>
+                        <button
+                          onClick={() => handleApplyScenario(s.id)}
+                          disabled={runningId === s.id}
+                          className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
+                        >
+                          Apply to {year} budget
+                        </button>
+                      </div>
+                    </div>
+                    <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+                      {Object.entries(s.adjustments || {}).map(([accountId, pct]) => (
+                        <li key={accountId}>{accountLabel(accountId)}: {pct as number > 0 ? '+' : ''}{pct as number}%</li>
+                      ))}
+                    </ul>
+                    {results && (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="text-left text-gray-500 dark:text-gray-400">
+                            <tr>
+                              <th className="pr-3 py-1"></th>
+                              {MONTHS.map((m) => <th key={m} className="pr-3 py-1 text-right">{m}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="pr-3 py-1 text-gray-500 dark:text-gray-400">Baseline</td>
+                              {totalsByMonth.map((t) => <td key={t.month} className="pr-3 py-1 text-right text-gray-700 dark:text-gray-300">{currency(t.baseline)}</td>)}
+                            </tr>
+                            <tr>
+                              <td className="pr-3 py-1 text-gray-500 dark:text-gray-400">Projected</td>
+                              {totalsByMonth.map((t) => <td key={t.month} className="pr-3 py-1 text-right font-medium text-gray-900 dark:text-gray-100">{currency(t.projected)}</td>)}
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
