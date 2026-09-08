@@ -218,37 +218,38 @@ explicit scope boundaries so no feature is misrepresented.
 
 ## Account reconciliation
 - `src/lib/account-reconciliation.ts` and
-  `/api/account-reconciliations/*` support reconciling **any**
-  balance-sheet account (not just bank accounts) against a statement
-  balance, with a line-clearing workflow. Completion is blocked unless
-  the cleared-line total matches the entered statement balance within
-  $0.01. There is **no dedicated UI page** yet — use the API directly.
+  `/api/account-reconciliations/*` (with a UI at `/accounting/reconcile-account`)
+  support reconciling **any** balance-sheet account (not just bank
+  accounts) against a statement balance, with a line-clearing workflow.
+  Completion is blocked unless the cleared-line total matches the
+  entered statement balance within $0.01.
 
 ## Period close checklist
-- `src/lib/close-checklist.ts` and `/api/close-checklist/*` let an
-  organization create a checklist of close tasks for an
-  `AccountingPeriod` (8 default tasks, or custom labels) and track each
-  item's status/assignment/notes. There is **no UI page** yet, and
-  completing checklist items does **not** automatically close the
+- `src/lib/close-checklist.ts` and `/api/close-checklist/*` (with a UI
+  at `/accounting/close-checklist`) let an organization create a
+  checklist of close tasks for an `AccountingPeriod` (8 default tasks,
+  or custom labels) and track each item's status/assignment/notes.
+  Completing checklist items does **not** automatically close the
   period — closing a period is still a separate, existing action.
 
 ## Fixed assets & depreciation
-- `src/lib/fixed-assets.ts` and `/api/fixed-assets/*` support a fixed
-  asset register with **straight-line depreciation only** (no
-  declining-balance, units-of-production, or bonus/Section 179
-  depreciation). Posting one month of depreciation
-  (`POST /api/fixed-assets/[id]/depreciate`) is idempotent per
-  asset/period and stops automatically once accumulated depreciation
-  reaches cost minus salvage value. There is **no UI page** and no
-  automatic monthly scheduling — depreciation must be posted manually
-  (or via an external scheduler calling the API) for each period.
+- `src/lib/fixed-assets.ts` and `/api/fixed-assets/*` (with a UI at
+  `/accounting/fixed-assets`) support a fixed asset register with
+  **straight-line depreciation only** (no declining-balance,
+  units-of-production, or bonus/Section 179 depreciation). Posting one
+  month of depreciation (`POST /api/fixed-assets/[id]/depreciate`) is
+  idempotent per asset/period and stops automatically once accumulated
+  depreciation reaches cost minus salvage value. There is no automatic
+  monthly scheduling — depreciation must be posted manually (or via an
+  external scheduler calling the API) for each period.
 
 ## Loans
-- `src/lib/loans.ts` and `/api/loans/*` generate a standard amortization
-  schedule and post loan payments (principal + interest split) via
+- `src/lib/loans.ts` and `/api/loans/*` (with a UI at
+  `/accounting/loans`) generate a standard amortization schedule and
+  post loan payments (principal + interest split) via
   `POST /api/loans/[id]/pay`, which always posts the **next** unpaid
   scheduled payment. There is no support for extra/prepayments,
-  variable-rate loans, or refinancing, and no UI page yet.
+  variable-rate loans, or refinancing.
 
 ## Three-way matching & duplicate bill detection
 - `src/lib/three-way-match.ts` and `/api/purchase-order-receipts/*`

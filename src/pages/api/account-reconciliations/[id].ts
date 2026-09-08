@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   const id = req.query.id as string
-  const reconciliation = await prisma.accountReconciliation.findUnique({ where: { id } })
+  const reconciliation = await prisma.accountReconciliation.findUnique({ where: { id }, include: { account: true } })
   if (!reconciliation) return res.status(404).json({ error: 'Reconciliation not found' })
   if (!(await userHasMembership(user.id, reconciliation.organizationId))) return res.status(403).json({ error: 'Forbidden' })
 

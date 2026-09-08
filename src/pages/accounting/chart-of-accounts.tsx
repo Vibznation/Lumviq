@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
@@ -82,12 +83,26 @@ function ChartOfAccountsContent() {
             {currentOrg?.name} &middot; every ledger posting must reference one of these accounts.
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
-        >
-          {showForm ? 'Cancel' : 'Add account'}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link href="/accounting/reconcile-account" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Reconcile an account
+          </Link>
+          <Link href="/accounting/close-checklist" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Close checklist
+          </Link>
+          <Link href="/accounting/fixed-assets" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Fixed assets
+          </Link>
+          <Link href="/accounting/loans" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Loans
+          </Link>
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
+          >
+            {showForm ? 'Cancel' : 'Add account'}
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -391,6 +391,7 @@ export const FEATURE_LINKS: Record<string, string> = {
   'accounting.bank-reconciliation': '/banking/reconcile',
   'accounting.receipt-matching': '/banking/reconcile',
   'accounting.recurring-transactions': '/sales/recurring',
+  'accounting.closing-periods': '/accounting/close-checklist',
   'accounting.audit-trail': '/settings/audit-log',
 
   'sales.estimates': '/sales/estimates',

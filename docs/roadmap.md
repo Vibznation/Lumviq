@@ -116,8 +116,17 @@
   `accountantInvitations`, the latter counting pending invitations so
   seats can't be reserved past the limit). See
   [known-limitations.md](known-limitations.md) for the full list and
-  what remains client-side-only.
-
+  what remains client-side-only.- **UI pages for account reconciliation, close checklist, fixed assets,
+  and loans**: added `/accounting/reconcile-account` (list + detail with
+  a line-clearing workflow and completion), `/accounting/close-checklist`
+  (per-period checklist creation and item toggling), `/accounting/fixed-assets`
+  (register + detail with a "Post depreciation" action), and
+  `/accounting/loans` (register + detail with a "Post next payment"
+  action), all wired to the existing API routes. Added a new
+  `GET /api/accounting-periods` route (accounting periods have no direct
+  `organizationId`, only via `FiscalYear`) and `GET` single-record routes
+  for `/api/fixed-assets/[id]` and `/api/loans/[id]`, which didn't
+  previously exist.
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
   existing `BankFeedProvider` interface.
@@ -151,9 +160,8 @@
 - Ticket-status transitions (e.g. resolve/close) for Support tickets,
   and per-organization role scoping so custom role names don't collide
   globally.
-- Dedicated UI pages for account reconciliation, close checklist, fixed
-  assets, loans, budget scenario run, and intercompany transactions
-  (all API-complete, no frontend yet).
+- Dedicated UI pages for budget scenario run and intercompany
+  transactions (API-complete, no frontend yet).
 - Bill-line-to-PO-line matching by a real foreign key instead of
   description-text matching, for accurate three-way match results.
 - Multi-level (grandchild) consolidation hierarchies.
