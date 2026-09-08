@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { postVendorCreditToLedger } from '../../../lib/vendor-credits'
+import { enforceFeature } from '../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'organizationId, vendorId, amount and expenseAccountId are required' })
     }
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'expenses.vendor-credits'))) return
 
     const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } })
     if (!vendor || vendor.organizationId !== organizationId) {

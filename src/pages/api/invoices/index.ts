@@ -3,6 +3,7 @@ import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { computeInvoiceTotals, nextInvoiceNumber } from '../../../lib/invoicing'
 import { toMinorUnits, multiplyMinor, fromMinorUnits } from '../../../lib/money'
+import { enforceLimit } from '../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -29,6 +30,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'At least one invoice line is required' })
     }
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+    const invoicesThisMonth = await prisma.invoice.count({ where: { organizationId, createdAt: { gte: monthStart } } })
+    if (!(await enforceLimit(res, prisma, organizationId, 'invoicesPerMonth', invoicesThisMonth))) return
 
     const customer = await prisma.customer.findUnique({ where: { id: customerId } })
     if (!customer || customer.organizationId !== organizationId) {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   resolveEntitlements,
   hasFeature,
@@ -6,6 +6,8 @@ import {
   requireFeature,
   requireWithinLimit,
   EntitlementError,
+  enforceFeature,
+  enforceLimit,
 } from '../src/lib/entitlements'
 import { getPlan } from '../src/lib/plans'
 
@@ -77,5 +79,72 @@ describe('entitlements.ts requireWithinLimit', () => {
   it('throws once the current count reaches the numeric limit', () => {
     const entitlements = resolveEntitlements({ planId: 'free', billingCycle: 'monthly', addOns: [] })
     expect(() => requireWithinLimit(entitlements, 'users', 1)).toThrow(EntitlementError)
+  })
+})
+
+function mockRes() {
+  const res: any = {}
+  res.status = vi.fn(() => res)
+  res.json = vi.fn(() => res)
+  return res
+}
+
+function mockTx(org: { planId: string; billingCycle?: string; addOns?: string[] } | null) {
+  return { organization: { findUnique: vi.fn(async () => org) } }
+}
+
+describe('entitlements.ts enforceFeature (API route gate)', () => {
+  it('returns true and does not touch res when the feature is included', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'scale', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceFeature(res, tx, 'org-1', 'inventory.cogs')
+    expect(ok).toBe(true)
+    expect(res.status).not.toHaveBeenCalled()
+  })
+
+  it('returns false and writes a 403 with an upgradeMessage when the feature is not included', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'free', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceFeature(res, tx, 'org-1', 'projects.time-tracking')
+    expect(ok).toBe(false)
+    expect(res.status).toHaveBeenCalledWith(403)
+    const body = res.json.mock.calls[0][0]
+    expect(body.error).toContain('projects.time-tracking')
+    expect(body.upgradeMessage).toContain('Lumviq Grow')
+  })
+
+  it('rethrows non-entitlement errors (e.g. org not found) instead of swallowing them', async () => {
+    const res = mockRes()
+    const tx = mockTx(null)
+    await expect(enforceFeature(res, tx, 'missing-org', 'sales.invoices')).rejects.toThrow('Organization not found')
+    expect(res.status).not.toHaveBeenCalled()
+  })
+})
+
+describe('entitlements.ts enforceLimit (API route gate)', () => {
+  it('returns true when the current count is below the plan limit', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'start', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceLimit(res, tx, 'org-1', 'users', 2)
+    expect(ok).toBe(true)
+    expect(res.status).not.toHaveBeenCalled()
+  })
+
+  it('returns false and writes a 403 once the count reaches the plan limit', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'start', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceLimit(res, tx, 'org-1', 'users', 3)
+    expect(ok).toBe(false)
+    expect(res.status).toHaveBeenCalledWith(403)
+    const body = res.json.mock.calls[0][0]
+    expect(body.upgradeMessage).toBeTruthy()
+  })
+
+  it('never blocks an unlimited limit regardless of count', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'enterprise', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceLimit(res, tx, 'org-1', 'invoicesPerMonth', 999_999)
+    expect(ok).toBe(true)
+    expect(res.status).not.toHaveBeenCalled()
   })
 })

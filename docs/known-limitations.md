@@ -327,3 +327,29 @@ explicit scope boundaries so no feature is misrepresented.
 - No database-level row-level security; tenant isolation is enforced
   entirely at the application layer.
 
+## Entitlements (plan/feature/limit enforcement)
+- `src/lib/entitlements.ts` (`enforceFeature`, `enforceLimit`) is now
+  wired into a **representative sample** of API routes as real
+  server-side gates, returning `403 { error, upgradeMessage }` when an
+  organization's plan doesn't include a feature or has reached a
+  numeric limit: `POST /api/purchase-orders` (`expenses.purchase-orders`),
+  `POST /api/budgets` (`planning.budgets`), `POST /api/time-entries`
+  (`projects.time-tracking`), `POST /api/locations`
+  (`inventory.multiple-locations`), `POST /api/donations`
+  (`nonprofit.donations`), `POST /api/custom-fields`
+  (`team.custom-fields`), `POST /api/workflows`
+  (`team.workflow-automation`), `POST /api/vendor-credits`
+  (`expenses.vendor-credits`), `POST /api/invoices` (`invoicesPerMonth`,
+  counted per calendar month), and `POST /api/orgs/invite`
+  (`users`/`accountantInvitations`, counted as active memberships plus
+  already-pending, unaccepted invitations of the same kind, so seats
+  can't be reserved past the limit by sending invites that are never
+  accepted).
+- This is intentionally **not exhaustive** — most other feature-gated
+  and limit-gated routes still rely solely on the client-side hiding in
+  `AppShell`/`dashboard.tsx` (`hasFeature`/`hasAddOn`), which is a UX
+  convenience, not a security boundary, and can be bypassed by any
+  authenticated member calling the API directly. Extending server-side
+  enforcement to the remaining routes is tracked in
+  [roadmap.md](roadmap.md).
+

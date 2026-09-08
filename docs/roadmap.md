@@ -106,6 +106,17 @@
   `organizationId`) and refactored `src/lib/ledger.ts` to expose a
   transaction-scoped `postJournalEntryTx` so the approvals executor can
   post an approved journal entry without opening a nested transaction.
+- **Entitlement enforcement expansion**: wired `src/lib/entitlements.ts`'s
+  `enforceFeature`/`enforceLimit` gates into a representative sample of
+  API routes as real 403-returning server-side checks (previously
+  entitlements only drove client-side UI locking) — purchase orders,
+  budgets, time entries, locations, donations, custom fields, workflows,
+  vendor credits (feature gates), plus invoice creation and organization
+  invites (numeric plan-limit gates for `invoicesPerMonth`, `users` and
+  `accountantInvitations`, the latter counting pending invitations so
+  seats can't be reserved past the limit). See
+  [known-limitations.md](known-limitations.md) for the full list and
+  what remains client-side-only.
 
 ## Next up
 - Real bank feed provider integration (Plaid or similar) behind the
@@ -146,4 +157,8 @@
 - Bill-line-to-PO-line matching by a real foreign key instead of
   description-text matching, for accurate three-way match results.
 - Multi-level (grandchild) consolidation hierarchies.
+- Extending server-side entitlement enforcement (`enforceFeature`/
+  `enforceLimit`) beyond the current sample of routes to the remaining
+  feature- and limit-gated API routes, which still rely solely on
+  client-side UI locking.
 

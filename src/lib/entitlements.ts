@@ -87,3 +87,53 @@ export async function getOrgEntitlements(tx: any, organizationId: string): Promi
   if (!org) throw new Error('Organization not found')
   return resolveEntitlements(org)
 }
+
+/**
+ * Server-side entitlement gate for API routes. Call after the tenant
+ * membership check, before performing the gated action. Returns `true`
+ * when the organization's plan includes the feature (caller should
+ * proceed); returns `false` and has already written a 403 JSON response
+ * (`{ error, upgradeMessage }`) when it does not (caller must `return`
+ * immediately). Never trust client-side UI locking alone — see
+ * src/components/AppShell.tsx / src/pages/dashboard.tsx for the
+ * corresponding (non-authoritative) client-side hiding.
+ */
+export async function enforceFeature(res: any, tx: any, organizationId: string, featureKey: string): Promise<boolean> {
+  try {
+    const entitlements = await getOrgEntitlements(tx, organizationId)
+    requireFeature(entitlements, featureKey)
+    return true
+  } catch (err) {
+    if (err instanceof EntitlementError) {
+      res.status(403).json({ error: err.message, upgradeMessage: err.upgradeMessage })
+      return false
+    }
+    throw err
+  }
+}
+
+/**
+ * Server-side numeric-limit gate for API routes (e.g. users,
+ * invoicesPerMonth). `currentCount` must be computed by the caller
+ * (e.g. a count query scoped to the relevant period). Same return-value
+ * contract as enforceFeature.
+ */
+export async function enforceLimit(
+  res: any,
+  tx: any,
+  organizationId: string,
+  limitKey: keyof Entitlements['limits'],
+  currentCount: number
+): Promise<boolean> {
+  try {
+    const entitlements = await getOrgEntitlements(tx, organizationId)
+    requireWithinLimit(entitlements, limitKey, currentCount)
+    return true
+  } catch (err) {
+    if (err instanceof EntitlementError) {
+      res.status(403).json({ error: err.message, upgradeMessage: err.upgradeMessage })
+      return false
+    }
+    throw err
+  }
+}
