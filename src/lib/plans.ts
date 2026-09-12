@@ -102,6 +102,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
     ['approval-workflows', 'Approval workflows'],
     ['batch-expenses', 'Batch expenses'],
     ['ap-reporting', 'Accounts-payable reporting'],
+    ['mileage-tracking', 'Mileage tracking'],
+    ['contractor-tracking', '1099 contractor tracking'],
   ]),
   ...features('projects', [
     ['time-tracking', 'Time tracking'],
@@ -204,6 +206,8 @@ const START_FEATURES = assertKeys([
   'accounting.recurring-transactions',
   'sales.sales-tax-tracking',
   'sales.payment-reminders',
+  'expenses.mileage-tracking',
+  'expenses.contractor-tracking',
   'support.standard',
 ])
 
@@ -410,6 +414,8 @@ export const FEATURE_LINKS: Record<string, string> = {
   'expenses.expense-reimbursements': '/purchasing/reimbursements',
   'expenses.approval-workflows': '/approvals',
   'expenses.ap-reporting': '/reports?tab=AP+Aging',
+  'expenses.mileage-tracking': '/purchasing/mileage',
+  'expenses.contractor-tracking': '/settings/contractors',
 
   'projects.time-tracking': '/projects',
   'projects.billable-time': '/projects',

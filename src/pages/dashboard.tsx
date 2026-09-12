@@ -158,6 +158,9 @@ function DashboardContent() {
                 <ModuleLink href="/purchasing/reimbursements" locked={entitlements ? !hasFeature(entitlements, 'expenses.expense-reimbursements') : false}>
                   Reimbursements →
                 </ModuleLink>
+                <ModuleLink href="/purchasing/mileage" locked={entitlements ? !hasFeature(entitlements, 'expenses.mileage-tracking') : false}>
+                  Mileage →
+                </ModuleLink>
                 <Link href="/purchasing/vendors" className="text-teal-700 dark:text-teal-400 hover:underline">Vendors →</Link>
               </div>
             </div>

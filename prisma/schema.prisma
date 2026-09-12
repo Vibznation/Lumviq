@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -89,6 +90,7 @@ model Organization {
   loans          Loan[]
   purchaseOrderReceipts PurchaseOrderReceipt[]
   vendorUploadTokens VendorUploadToken[]
+  mileageLogs    MileageLog[]
   intercompanyOwned      IntercompanyTransaction[] @relation("IntercompanyOwner")
   intercompanyCounterparty IntercompanyTransaction[] @relation("IntercompanyCounterparty")
   roles          Role[]
@@ -876,6 +878,31 @@ model DimensionValue {
 
   @@unique([dimensionId, name])
   @@map("dimension_values")
+}
+
+/// Mileage log entry for business-travel deduction/reimbursement
+/// tracking (Lumviq Start and higher). The reimbursable amount is
+/// computed and stored at creation time (miles * ratePerMile) and is
+/// never recalculated retroactively if the rate later changes.
+/// Optionally linked to a Reimbursement once paid out. See
+/// docs/known-limitations.md.
+model MileageLog {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id")
+  userId          String    @map("user_id")
+  date            DateTime
+  startLocation   String    @map("start_location")
+  endLocation     String    @map("end_location")
+  purpose         String?
+  miles           Decimal   @db.Decimal(10, 2)
+  ratePerMile     Decimal   @map("rate_per_mile") @db.Decimal(6, 3)
+  amount          Decimal   @db.Decimal(12, 2)
+  reimbursementId String?   @map("reimbursement_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("mileage_logs")
 }
 
 /// Lightweight 1099 contractor directory entry, optionally linked to a

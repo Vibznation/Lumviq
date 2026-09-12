@@ -39,6 +39,16 @@ explicit scope boundaries so no feature is misrepresented.
   merged across organizations — each entity remains fully independent
   for accounting and audit purposes.
 
+## Mileage tracking
+- `MileageLog` (`src/lib/mileage.ts`, `POST/GET /api/mileage`, UI at
+  `/purchasing/mileage`, gated behind `expenses.mileage-tracking` on
+  Start and above) is a directory/log only. The reimbursable amount
+  (`miles * ratePerMile`) is computed and stored once at creation and is
+  never recalculated if the rate changes later. Lumviq does not
+  calculate tax deductions, and a mileage entry is not automatically
+  turned into a `Reimbursement` — `reimbursementId` exists on the model
+  for a future manual-link step but nothing currently sets it.
+
 ## AI Intelligence
 - The Intelligence page uses deterministic, rule-based calculations
   (linear cash-flow projection, z-score outlier detection on journal

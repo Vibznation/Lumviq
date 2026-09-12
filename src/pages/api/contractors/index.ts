@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
+import { enforceFeature } from '../../../lib/entitlements'
 import { createContractor } from '../../../lib/contractors'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,6 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { organizationId, name, email, taxIdLast4, vendorId } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'expenses.contractor-tracking'))) return
     if (vendorId) {
       const vendor = await prisma.vendor.findUnique({ where: { id: vendorId } })
       if (!vendor || vendor.organizationId !== organizationId) {
