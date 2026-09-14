@@ -10,9 +10,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const { email, password, name } = req.body
   if (!email || !password) return res.status(400).json({ error: 'email and password required' })
-  const existing = await prisma.user.findUnique({ where: { email } })
-  if (existing) return res.status(409).json({ error: 'User exists' })
-  const passwordHash = await bcrypt.hash(password, 10)
-  const user = await prisma.user.create({ data: { email, name, passwordHash } })
-  return res.status(201).json({ id: user.id, email: user.email })
+  try {
+    const existing = await prisma.user.findUnique({ where: { email } })
+    if (existing) return res.status(409).json({ error: 'User exists' })
+    const passwordHash = await bcrypt.hash(password, 10)
+    const user = await prisma.user.create({ data: { email, name, passwordHash } })
+    return res.status(201).json({ id: user.id, email: user.email })
+  } catch (err: any) {
+    // Unique constraint race (two concurrent requests for the same email)
+    if (err?.code === 'P2002') {
+      return res.status(409).json({ error: 'User exists' })
+    }
+    console.error('Register failed:', err)
+    return res.status(500).json({ error: 'Could not create your account, please try again' })
+  }
 }
