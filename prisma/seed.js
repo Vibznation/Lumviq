@@ -6,23 +6,29 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('Seeding demo data...')
 
-  // Roles
-  const ownerRole = await prisma.role.upsert({
-    where: { name: 'owner' },
-    update: {},
-    create: { name: 'owner', description: 'Organization owner' },
-  })
-  const memberRole = await prisma.role.upsert({
-    where: { name: 'member' },
-    update: {},
-    create: { name: 'member', description: 'Standard member' },
-  })
-
-  // Permissions
+  // Permissions (global catalog)
   const invitePerm = await prisma.permission.upsert({
     where: { name: 'invite_members' },
     update: {},
     create: { name: 'invite_members', description: 'Can invite members' },
+  })
+
+  // Demo organization
+  let org = await prisma.organization.findFirst({ where: { name: 'Lumviq Demo Org' } })
+  if (!org) {
+    org = await prisma.organization.create({ data: { name: 'Lumviq Demo Org' } })
+  }
+
+  // Roles (org-scoped)
+  const ownerRole = await prisma.role.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: 'owner' } },
+    update: {},
+    create: { organizationId: org.id, name: 'owner', description: 'Organization owner' },
+  })
+  await prisma.role.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: 'member' } },
+    update: {},
+    create: { organizationId: org.id, name: 'member', description: 'Standard member' },
   })
   await prisma.rolePermission.upsert({
     where: {
@@ -34,12 +40,6 @@ async function main() {
     update: {},
     create: { roleId: ownerRole.id, permissionId: invitePerm.id },
   })
-
-  // Demo organization
-  let org = await prisma.organization.findFirst({ where: { name: 'Lumviq Demo Org' } })
-  if (!org) {
-    org = await prisma.organization.create({ data: { name: 'Lumviq Demo Org' } })
-  }
 
   // Demo user
   const passwordHash = await bcrypt.hash('Password123!', 10)
@@ -60,6 +60,7 @@ async function main() {
     update: { role: 'owner', roleId: ownerRole.id },
     create: { userId: user.id, organizationId: org.id, role: 'owner', roleId: ownerRole.id },
   })
+
 
   const findOrCreateAccount = async (code, name, type) => {
     let account = await prisma.account.findFirst({ where: { organizationId: org.id, code } })
