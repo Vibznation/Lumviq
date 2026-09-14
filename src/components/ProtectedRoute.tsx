@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { useAuth } from '../lib/auth-context'
 import AppShell from './AppShell'
@@ -17,15 +17,28 @@ export default function ProtectedRoute({
 }) {
   const router = useRouter()
   const { token, loading, organizations } = useAuth()
+  // Guards against calling router.replace more than once for the same
+  // redirect decision. Without this, React 18 StrictMode's dev-only
+  // double-invocation of effects (and rapid re-renders while auth state
+  // settles) can fire router.replace twice in a row, which makes Next.js
+  // abort the first in-flight navigation and log a benign but noisy
+  // "Abort fetching component for route" error.
+  const redirectingRef = useRef(false)
 
   useEffect(() => {
     if (loading) return
     if (!token) {
-      router.replace('/login')
+      if (!redirectingRef.current) {
+        redirectingRef.current = true
+        router.replace('/login')
+      }
       return
     }
     if (requireOrg && organizations.length === 0 && router.pathname !== '/onboarding') {
-      router.replace('/onboarding')
+      if (!redirectingRef.current) {
+        redirectingRef.current = true
+        router.replace('/onboarding')
+      }
     }
   }, [loading, token, organizations, requireOrg, router])
 
