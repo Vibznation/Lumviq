@@ -130,6 +130,9 @@ export default function ProductTour() {
 
   return (
     <div>
+      <p className="mb-3 text-xs text-gray-400 dark:text-gray-500">
+        Sample data shown for illustration only — company names and figures below are fictional.
+      </p>
       <div role="tablist" aria-label="Lumviq product tour" className="flex flex-wrap gap-2 mb-4" onKeyDown={onKeyDown}>
         {TABS.map((tab, i) => (
           <button
