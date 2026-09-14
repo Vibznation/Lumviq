@@ -33,6 +33,7 @@ model Organization {
   billingCycle   String                  @default("monthly") @map("billing_cycle")
   addOns         String[]                @default([]) @map("add_ons")
   approvalThresholds Json?               @map("approval_thresholds")
+  idempotencyKey String?                 @unique @map("idempotency_key")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
   memberships    OrganizationMembership[]

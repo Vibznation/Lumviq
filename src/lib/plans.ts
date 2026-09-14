@@ -219,6 +219,7 @@ const GROW_FEATURES = assertKeys([
   'projects.billable-time',
   'projects.project-expenses',
   'projects.project-profitability',
+  'projects.project-budgets',
   'expenses.purchase-orders',
   'expenses.recurring-bills',
   'expenses.expense-reimbursements',
@@ -226,6 +227,7 @@ const GROW_FEATURES = assertKeys([
   'expenses.approval-workflows',
   'team.dimension-tracking',
   'planning.budgets',
+  'planning.budget-vs-actual',
   'planning.cash-flow-forecast',
   'support.priority',
 ])
@@ -320,7 +322,7 @@ export const PLANS: Plan[] = [
     monthlyPrice: 49,
     mostPopular: true,
     designedFor: ['Small businesses', 'Service businesses', 'Growing teams'],
-    limits: { users: 10, accountantInvitations: 3, invoicesPerMonth: 'unlimited', salesChannelConnections: 3 },
+    limits: { users: 10, accountantInvitations: 5, invoicesPerMonth: 'unlimited', salesChannelConnections: 3 },
     featureKeys: GROW_FEATURES,
     includesFrom: 'start',
     highlights: [
@@ -336,7 +338,7 @@ export const PLANS: Plan[] = [
     name: 'Lumviq Scale',
     monthlyPrice: 99,
     designedFor: ['Established businesses', 'Product companies', 'Nonprofits', 'Multi-location organizations'],
-    limits: { users: 25, accountantInvitations: 5, invoicesPerMonth: 'unlimited', salesChannelConnections: 'unlimited' },
+    limits: { users: 25, accountantInvitations: 10, invoicesPerMonth: 'unlimited', salesChannelConnections: 'unlimited' },
     featureKeys: SCALE_FEATURES,
     includesFrom: 'grow',
     highlights: [

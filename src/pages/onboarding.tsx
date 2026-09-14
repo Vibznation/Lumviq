@@ -1,8 +1,15 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import { brand } from '../lib/brand'
 import { authHeaders, useAuth } from '../lib/auth-context'
 import { PLANS } from '../lib/plans'
+
+function generateIdempotencyKey(): string {
+  if (typeof window !== 'undefined' && window.crypto && 'randomUUID' in window.crypto) {
+    return window.crypto.randomUUID()
+  }
+  return `org-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -12,6 +19,12 @@ export default function OnboardingPage() {
   const [industry, setIndustry] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Stable per-page-load key so a retried/duplicated request (double-click,
+  // dropped response, etc.) is recognized as the same create attempt server-side.
+  const idempotencyKeyRef = useRef(generateIdempotencyKey())
+  // Synchronous guard against re-entrant submits firing before React re-renders
+  // the disabled button (state updates are async).
+  const submittingRef = useRef(false)
 
   const planId = typeof router.query.plan === 'string' ? router.query.plan : 'free'
   const billingCycle = router.query.billing === 'annual' ? 'annual' : 'monthly'
@@ -30,13 +43,15 @@ export default function OnboardingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setError(null)
     setSubmitting(true)
     try {
       const res = await fetch('/api/orgs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-        body: JSON.stringify({ name, orgType, industry: industry || undefined, planId, billingCycle, addOns }),
+        body: JSON.stringify({ name, orgType, industry: industry || undefined, planId, billingCycle, addOns, idempotencyKey: idempotencyKeyRef.current }),
       })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
@@ -49,6 +64,7 @@ export default function OnboardingPage() {
       router.push('/dashboard')
     } finally {
       setSubmitting(false)
+      submittingRef.current = false
     }
   }
 

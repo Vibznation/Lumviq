@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const token = auth.split(' ')[1]
   const payload = verifyToken(token)
   if (!payload || !payload.userId) return res.status(401).json({ error: 'Invalid token' })
-  const { name, orgType, industry, planId, billingCycle, addOns } = req.body
+  const { name, orgType, industry, planId, billingCycle, addOns, idempotencyKey } = req.body
   if (!name) return res.status(400).json({ error: 'name required' })
   if (orgType && orgType !== 'business' && orgType !== 'nonprofit') {
     return res.status(400).json({ error: 'orgType must be "business" or "nonprofit"' })
@@ -19,8 +19,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const resolvedPlanId = planId && PLANS.some((p) => p.id === planId) ? planId : 'free'
   const resolvedBillingCycle = billingCycle === 'annual' ? 'annual' : 'monthly'
   const resolvedAddOns: string[] = Array.isArray(addOns) ? addOns.filter((id: string) => ADD_ONS.some((a) => a.id === id)) : []
+  const resolvedIdempotencyKey: string | null = typeof idempotencyKey === 'string' && idempotencyKey.length > 0 ? idempotencyKey : null
 
-  const org = await prisma.$transaction(async (tx) => {
+  // Idempotency guard: if this exact create-request (by key) already succeeded
+  // (e.g. the client retried after a dropped response, or double-submitted the
+  // onboarding form), return the existing organization instead of creating a
+  // duplicate. Only honors the key if the requesting user already has access
+  // to that organization, so a key can't be reused to read another org's data.
+  if (resolvedIdempotencyKey) {
+    const existingOrg = await prisma.organization.findUnique({ where: { idempotencyKey: resolvedIdempotencyKey } })
+    if (existingOrg) {
+      const membership = await prisma.organizationMembership.findFirst({ where: { userId: payload.userId, organizationId: existingOrg.id } })
+      if (membership) {
+        return res.status(200).json({ id: existingOrg.id, name: existingOrg.name, orgType: existingOrg.orgType, industry: existingOrg.industry, planId: existingOrg.planId })
+      }
+    }
+  }
+
+  let org
+  try {
+    org = await prisma.$transaction(async (tx) => {
     const created = await tx.organization.create({
       data: {
         name,
@@ -29,6 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         planId: resolvedPlanId,
         billingCycle: resolvedBillingCycle,
         addOns: resolvedAddOns,
+        idempotencyKey: resolvedIdempotencyKey,
       },
     })
     await tx.organizationMembership.create({
@@ -67,7 +86,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
     return created
-  })
+    })
+  } catch (err: any) {
+    // Race condition: two concurrent requests with the same idempotency key.
+    // The unique constraint rejects the second insert — treat it the same as
+    // the pre-check above and return the winning organization.
+    if (err?.code === 'P2002' && resolvedIdempotencyKey) {
+      const existingOrg = await prisma.organization.findUnique({ where: { idempotencyKey: resolvedIdempotencyKey } })
+      if (existingOrg) {
+        return res.status(200).json({ id: existingOrg.id, name: existingOrg.name, orgType: existingOrg.orgType, industry: existingOrg.industry, planId: existingOrg.planId })
+      }
+    }
+    throw err
+  }
 
   return res.status(201).json({ id: org.id, name: org.name, orgType: org.orgType, industry: org.industry, planId: org.planId })
 }
