@@ -236,7 +236,7 @@ function DashboardContent() {
                 <ModuleLink href="/settings/approval-thresholds" locked={entitlements ? !hasFeature(entitlements, 'team.approval-limits') : false}>
                   Approval limits →
                 </ModuleLink>
-                <ModuleLink href="/settings/audit-log" locked={entitlements ? !hasFeature(entitlements, 'team.audit-history') : false}>
+                <ModuleLink href="/settings/audit-log" locked={false}>
                   Audit history →
                 </ModuleLink>
               </div>
