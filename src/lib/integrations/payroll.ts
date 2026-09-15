@@ -88,6 +88,11 @@ export interface PayrollBankAccountResult {
   externalId: string
   verificationStatus: 'pending' | 'verified' | 'failed'
   last4: string
+  /** Sandbox-only convenience so the test-mode micro-deposit verification
+   * challenge can be completed without a real bank. A real provider never
+   * populates this — verification happens on the provider's own hosted
+   * flow instead. */
+  sandboxMicroDepositAmounts?: [string, string]
 }
 
 export interface PayrollTaxProfileInput {
@@ -225,6 +230,8 @@ export interface PayrollProvider {
   createContractor(input: PayrollContractorInput): Promise<PayrollContractorResult>
 
   configureBankAccount(input: PayrollBankAccountInput): Promise<PayrollBankAccountResult>
+  /** Completes bank-account verification (e.g. a micro-deposit challenge). */
+  verifyBankAccount(externalId: string, amounts: [string, string]): Promise<PayrollBankAccountResult>
   configureTaxProfile(input: PayrollTaxProfileInput): Promise<PayrollTaxProfileResult>
   createPaySchedule(input: PayrollScheduleInput): Promise<PayrollScheduleResult>
 

@@ -17,7 +17,7 @@
  * reports as "not connected", identical to the bank-feed/payments/ocr
  * stubs in this same directory.
  */
-import { randomUUID, createHmac, timingSafeEqual } from 'crypto'
+import { randomUUID, createHmac, createHash, timingSafeEqual } from 'crypto'
 import type {
   PayrollProvider,
   PayrollCompanyInput,
@@ -77,6 +77,7 @@ export class SandboxPayrollProvider implements PayrollProvider {
   // provider's API instead. Fine for sandbox/dev-mode exercising of the
   // workflow; not durable across process restarts.
   private runs = new Map<string, SandboxPayrollRun>()
+  private bankAccounts = new Map<string, { amounts: [string, string]; last4: string; verified: boolean }>()
 
   isConfigured(): boolean {
     return true
@@ -119,10 +120,33 @@ export class SandboxPayrollProvider implements PayrollProvider {
   }
 
   async configureBankAccount(input: PayrollBankAccountInput): Promise<PayrollBankAccountResult> {
+    const externalId = `sandbox_bank_${randomUUID()}`
+    // Deterministic two-cent micro-deposit simulation (like a real
+    // provider's ACH trial-deposit verification, but instant and fake).
+    const hash = createHash('sha256').update(input.accountNumber + input.routingNumber).digest()
+    const amounts: [string, string] = [
+      ((hash[0] % 49) + 1 + '').padStart(2, '0'),
+      ((hash[1] % 49) + 1 + '').padStart(2, '0'),
+    ].map((cents) => `0.${cents}`) as [string, string]
+    const accountLast4 = last4(input.accountNumber)
+    this.bankAccounts.set(externalId, { amounts, last4: accountLast4, verified: false })
     return {
-      externalId: `sandbox_bank_${randomUUID()}`,
+      externalId,
       verificationStatus: 'pending',
-      last4: last4(input.accountNumber),
+      last4: accountLast4,
+      sandboxMicroDepositAmounts: amounts,
+    }
+  }
+
+  async verifyBankAccount(externalId: string, amounts: [string, string]): Promise<PayrollBankAccountResult> {
+    const record = this.bankAccounts.get(externalId)
+    if (!record) throw new Error(`Sandbox bank account not found: ${externalId}`)
+    const matches = amounts[0] === record.amounts[0] && amounts[1] === record.amounts[1]
+    record.verified = matches
+    return {
+      externalId,
+      verificationStatus: matches ? 'verified' : 'failed',
+      last4: record.last4,
     }
   }
 
@@ -252,16 +276,59 @@ export class SandboxPayrollProvider implements PayrollProvider {
     return { employeeExternalId, lines: line }
   }
 
-  async retrieveTaxLiabilities(): Promise<PayrollTaxLiability[]> {
-    return []
+  async retrieveTaxLiabilities(companyExternalId: string): Promise<PayrollTaxLiability[]> {
+    // Deterministic simulation: derive a small set of outstanding
+    // liabilities from completed/paid sandbox runs so the tax center has
+    // something real to reconcile against in test mode.
+    const liabilities: PayrollTaxLiability[] = []
+    for (const run of this.runs.values()) {
+      if (run.status !== 'paid' && run.status !== 'completed') continue
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + 15)
+      liabilities.push({
+        jurisdiction: 'federal',
+        formType: '941',
+        amount: round2(Number(run.result.totalEmployeeTax) + Number(run.result.totalEmployerTax)),
+        dueDate: dueDate.toISOString(),
+      })
+    }
+    return liabilities
   }
 
-  async retrieveTaxFilings(): Promise<PayrollTaxFilingStatus[]> {
-    return []
+  async retrieveTaxFilings(companyExternalId: string): Promise<PayrollTaxFilingStatus[]> {
+    const now = new Date()
+    const periodStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1)
+    const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 3, 0)
+    if (this.runs.size === 0) return []
+    return [
+      {
+        jurisdiction: 'federal',
+        formType: '941',
+        filingPeriodStart: periodStart.toISOString(),
+        filingPeriodEnd: periodEnd.toISOString(),
+        status: 'pending',
+      },
+    ]
   }
 
-  async retrieveTaxDocuments(): Promise<PayrollTaxDocumentResult[]> {
-    return []
+  async retrieveTaxDocuments(companyExternalId: string, taxYear: number): Promise<PayrollTaxDocumentResult[]> {
+    // Sandbox documents are only ever marked 'pending' — a real provider
+    // generates and delivers the actual W-2/1099 PDFs at year end.
+    const documents: PayrollTaxDocumentResult[] = []
+    const seen = new Set<string>()
+    for (const run of this.runs.values()) {
+      for (const line of run.result.lines) {
+        if (seen.has(line.employeeExternalId)) continue
+        seen.add(line.employeeExternalId)
+        documents.push({
+          ownerExternalId: line.employeeExternalId,
+          documentType: 'w2',
+          taxYear,
+          status: 'pending',
+        })
+      }
+    }
+    return documents
   }
 
   async retrievePaymentStatus(providerPayrollId: string): Promise<PayrollSubmissionResult> {

@@ -81,6 +81,7 @@ model Organization {
   payrollProviderLinks PayrollProviderLink[]
   payrollWebhookEvents PayrollWebhookEvent[]
   directDepositAccounts DirectDepositAccount[]
+  payrollCompanyProfile PayrollCompanyProfile?
   webhooks       Webhook[]
   estimates      Estimate[]
   purchaseOrders PurchaseOrder[]
@@ -1283,12 +1284,57 @@ model Location {
   active         Boolean   @default(true)
   createdAt      DateTime  @default(now()) @map("created_at")
 
+  /// Payroll workplace / tax-jurisdiction fields — populated when this
+  /// location is registered as a payroll work location ("workplace") with
+  /// the connected payroll provider. Not required for non-payroll uses of
+  /// Location (e.g. inventory warehouses).
+  isPayrollWorkplace   Boolean  @default(false) @map("is_payroll_workplace")
+  state                String?
+  sutaAccountNumber    String?  @map("suta_account_number")
+  sutaRate             Decimal? @db.Decimal(6, 4) @map("suta_rate")
+  providerWorkplaceId  String?  @map("provider_workplace_id")
+
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stockMovements StockMovement[]
   employees      Employee[]
   payRunLines    PayRunLine[]
 
   @@map("locations")
+}
+
+/// Employer-level payroll onboarding profile (one per organization).
+/// Legal business identity + signatory used to onboard the organization
+/// with a connected payroll provider (createCompany/verifyCompany in
+/// src/lib/integrations/payroll.ts). The federal EIN is a business tax
+/// identifier (not an individual SSN) but is still stored encrypted at
+/// rest with only the last 4 digits ever surfaced, consistent with the
+/// rest of Lumviq's payroll PII handling.
+model PayrollCompanyProfile {
+  id                  String    @id @default(uuid()) @db.Uuid
+  organizationId      String    @unique @map("organization_id")
+  legalBusinessName   String    @map("legal_business_name")
+  /// 'sole_proprietor' | 'llc' | 'c_corp' | 's_corp' | 'partnership' | 'nonprofit'
+  entityType          String    @map("entity_type")
+  einEncrypted        String?   @map("ein_encrypted")
+  einLast4            String?   @map("ein_last4")
+  addressLine1         String   @map("address_line1")
+  addressLine2         String?  @map("address_line2")
+  city                 String
+  state                String
+  postalCode           String   @map("postal_code")
+  signatoryName        String   @map("signatory_name")
+  signatoryTitle       String   @map("signatory_title")
+  contactEmail         String   @map("contact_email")
+  contactPhone         String?  @map("contact_phone")
+  /// 'not_started' | 'information_required' | 'verification_pending' | 'active' | 'suspended'
+  onboardingStatus     String   @default("not_started") @map("onboarding_status")
+  providerCompanyId    String?  @map("provider_company_id")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_company_profiles")
 }
 
 /// Staff allocation: which users are assigned to a project and at what
@@ -1760,7 +1806,9 @@ model EmployeeTaxProfile {
 model DirectDepositAccount {
   id                     String    @id @default(uuid()) @db.Uuid
   organizationId         String    @map("organization_id")
-  /// 'employee' | 'contractor'
+  /// 'employee' | 'contractor' | 'employer' (employer = the organization's own
+  /// funding/debit account used by the provider to fund payroll; employeeId
+  /// and contractorId are both null in that case)
   ownerType              String    @map("owner_type")
   employeeId             String?   @map("employee_id")
   contractorId           String?   @map("contractor_id")

@@ -24,8 +24,8 @@ const INTEGRATIONS = [
 ]
 
 const PAYROLL_DESCRIPTION = 'Calculate tax withholding, file payroll tax returns, and pay employees/contractors via direct deposit.'
-const PAYROLL_DETAIL_NOT_CONNECTED = 'Requires a licensed payroll provider (e.g. Check, Gusto Embedded) to be contracted and connected. Until then, Lumviq only records the accounting impact of payroll totals you enter manually — see the Payroll page.'
-const PAYROLL_DETAIL_SANDBOX = 'Running in sandbox (test) mode against simplified, non-authoritative tax estimates — not a licensed provider. Do not use sandbox-calculated amounts to actually pay anyone or file taxes.'
+const PAYROLL_DETAIL_NOT_CONNECTED = 'Requires a licensed payroll provider (e.g. Check, Gusto Embedded) to be contracted and connected, with API credentials set as server environment variables (PAYROLL_PROVIDER_MODE and provider secrets) by a deployment administrator. API secrets cannot be entered through this page. Until a provider is connected, use the manual "Enter provider totals" fallback on the Payroll page.'
+const PAYROLL_DETAIL_SANDBOX = 'Connected to a sandbox (test-mode) payroll provider. The full onboarding, calculation, approval, direct-deposit and tax-filing lifecycle is exercised end to end, but no real payments or tax filings occur. Go to the Payroll page to onboard your company, employees and contractors.'
 
 function IntegrationsContent() {
   const { currentOrg, token } = useAuth()
@@ -65,6 +65,11 @@ function IntegrationsContent() {
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400">{integration.description}</p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{integration.detail}</p>
+            {integration.name === 'Full-service payroll' && (
+              <p className="mt-2 text-xs">
+                <a href="/payroll" className="text-teal-700 dark:text-teal-400 hover:underline">Go to Payroll →</a>
+              </p>
+            )}
           </div>
         ))}
       </div>

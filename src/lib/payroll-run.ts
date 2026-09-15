@@ -22,6 +22,7 @@ import { getPayrollProvider } from './integrations/payroll-sandbox'
 import type { PayrollCalculationRequest, PayrollProvider } from './integrations/payroll'
 import { postPayRunToLedger } from './payroll'
 import { requestApproval } from './approvals'
+import { postJournalEntryTx } from './ledger'
 
 export class PayrollProviderNotConnectedError extends Error {
   constructor() {
@@ -206,6 +207,16 @@ export async function submitApprovedPayRun(tx: any, payRunId: string, actorId: s
  * either from the payroll webhook handler or a manual "check status"
  * action in the UI.
  */
+/** Creates a PayStub row for each pay-run line that doesn't already have one (idempotent, called once a run reaches completed). */
+async function generatePayStubs(tx: any, payRun: any) {
+  const payDate = payRun.employeePaymentDate ?? new Date()
+  for (const line of payRun.lines) {
+    const existing = await tx.payStub.findUnique({ where: { payRunLineId: line.id } })
+    if (existing) continue
+    await tx.payStub.create({ data: { payRunId: payRun.id, payRunLineId: line.id, employeeId: line.employeeId, payDate } })
+  }
+}
+
 export async function syncPayRunStatus(tx: any, payRunId: string, actorId: string) {
   const payRun = await tx.payRun.findUnique({ where: { id: payRunId }, include: { lines: { include: { employee: true } } } })
   if (!payRun) throw new Error('Pay run not found')
@@ -224,6 +235,7 @@ export async function syncPayRunStatus(tx: any, payRunId: string, actorId: strin
     journalEntryId = entry.id
     postedAt = new Date()
     status = 'completed'
+    await generatePayStubs(tx, payRun)
   }
 
   const updated = await tx.payRun.update({
@@ -279,3 +291,84 @@ export async function voidPayRun(tx: any, payRunId: string, actorId: string) {
   })
   return updated
 }
+
+/**
+ * Reverses a completed pay run: posts a mirror-image journal entry (every
+ * debit/credit flipped) and creates a new PayRun record (offCycle,
+ * status 'completed', reversalOfPayRunId pointing at the original, totals
+ * negated) so reports and the general ledger both reflect the correction.
+ * The original pay run is marked 'reversed'. Does not attempt to claw
+ * back funds already paid out by the provider — that requires the
+ * provider's own correction/off-cycle-deduction workflow once a real
+ * provider is connected.
+ */
+export async function reversePayRun(tx: any, payRunId: string, actorId: string) {
+  const original = await tx.payRun.findUnique({ where: { id: payRunId }, include: { lines: true } })
+  if (!original) throw new Error('Pay run not found')
+  if (original.status !== 'completed') throw new Error('Only completed pay runs can be reversed')
+  if (!original.journalEntryId) throw new Error('Pay run has no journal entry to reverse')
+
+  const existingReversal = await tx.payRun.findUnique({ where: { reversalOfPayRunId: payRunId } })
+  if (existingReversal) throw new Error('This pay run has already been reversed')
+
+  const originalEntry = await tx.journalEntry.findUnique({ where: { id: original.journalEntryId }, include: { lines: true } })
+  if (!originalEntry) throw new Error('Original journal entry not found')
+
+  const reversalLines = originalEntry.lines.map((l: any) => ({
+    accountId: l.accountId,
+    amount: l.amount.toString(),
+    isDebit: !l.isDebit,
+    description: l.description ? `Reversal: ${l.description}` : 'Payroll reversal',
+  }))
+
+  const reversalEntry = await postJournalEntryTx(
+    tx,
+    {
+      organizationId: original.organizationId,
+      description: `Reversal of pay run ${original.id}`,
+      idempotencyKey: `pay-run:${original.id}:reversal`,
+      lines: reversalLines,
+    },
+    actorId
+  )
+
+  const reversal = await tx.payRun.create({
+    data: {
+      organizationId: original.organizationId,
+      payScheduleId: original.payScheduleId,
+      payPeriodStart: original.payPeriodStart,
+      payPeriodEnd: original.payPeriodEnd,
+      offCycle: true,
+      status: 'completed',
+      totalGross: (-Number(original.totalGross)).toString(),
+      totalEmployeeTax: (-Number(original.totalEmployeeTax)).toString(),
+      totalEmployerTax: (-Number(original.totalEmployerTax)).toString(),
+      totalPretaxDeductions: (-Number(original.totalPretaxDeductions)).toString(),
+      totalPosttaxDeductions: (-Number(original.totalPosttaxDeductions)).toString(),
+      totalGarnishments: (-Number(original.totalGarnishments)).toString(),
+      totalReimbursements: (-Number(original.totalReimbursements)).toString(),
+      totalEmployerBenefitsCost: (-Number(original.totalEmployerBenefitsCost)).toString(),
+      totalNetPay: (-Number(original.totalNetPay)).toString(),
+      reversalOfPayRunId: original.id,
+      journalEntryId: reversalEntry.id,
+      preparedByUserId: actorId,
+      postedAt: new Date(),
+    },
+  })
+
+  await tx.payRun.update({ where: { id: original.id }, data: { status: 'reversed' } })
+
+  await tx.auditEvent.create({
+    data: {
+      organizationId: original.organizationId,
+      actorId,
+      action: 'pay_run.reverse',
+      resourceType: 'pay_run',
+      resourceId: original.id,
+      newState: { reversalPayRunId: reversal.id },
+    },
+  })
+
+  return reversal
+}
+

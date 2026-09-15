@@ -98,6 +98,36 @@ export interface PayrollProvider {
   source control — see [security-notes.md](security-notes.md)). No call
   site changes are needed elsewhere.
 
+### Required environment variables & prerequisites (sandbox vs. real provider)
+- `PAYROLL_PROVIDER_MODE=sandbox` — enables the in-memory
+  `SandboxPayrollProvider` for local development/testing only. Must be
+  **unset** in production; a deployment admin sets this, it is never
+  enterable through the UI (see `src/pages/settings/integrations.tsx`).
+- `PAYROLL_WEBHOOK_SECRET` — HMAC-SHA256 secret used by
+  `SandboxPayrollProvider.handleWebhook()` to verify the
+  `x-payroll-signature` header on inbound `POST /api/webhooks/payroll`
+  requests. A real provider integration must verify signatures using
+  that provider's documented scheme/secret instead.
+- `FIELD_ENCRYPTION_KEY` — required for `src/lib/encryption.ts` (AES-256-GCM),
+  which encrypts SSNs and bank routing/account numbers at rest. Required
+  in any environment that stores real employee/contractor payroll data.
+- Connecting an actual licensed provider (Check, Gusto Embedded, Rippling,
+  etc.) additionally requires, before any production traffic:
+  - A signed partner/reseller or platform agreement with that provider
+    (payroll is a regulated activity; Lumviq cannot legally move money or
+    file taxes on a customer's behalf without one).
+  - Provider API credentials (client id/secret or API key) issued under
+    that agreement, stored as server-side environment variables/secrets
+    manager entries — never client-exposed, never in source control.
+  - Registering Lumviq's production webhook URL
+    (`https://<host>/api/webhooks/payroll`) with the provider and
+    configuring the provider-issued webhook signing secret.
+  - Confirming the provider's own compliance posture (SOC 2, money
+    transmitter licensing where applicable) satisfies the deploying
+    organization's obligations — Lumviq's sandbox adapter and encryption
+    controls do not by themselves make real payroll processing compliant.
+
+
 ## Webhooks (outbound, Lumviq → external systems) — `src/lib/webhooks.ts`
 Unlike the three interfaces above (inbound provider integrations),
 webhooks are an **outbound** integration point Lumviq itself exposes:
