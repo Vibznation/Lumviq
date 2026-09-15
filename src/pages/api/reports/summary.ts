@@ -21,23 +21,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const accounts = await prisma.account.findMany({ where: { organizationId } })
   const accountsById = new Map(accounts.map((a) => [a.id, a]))
 
-  const lines = await prisma.journalLine.findMany({
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+
+  // Balance-type totals (asset/liability/equity/cash) are cumulative as-of
+  // endDate (or now); revenue/expense are restricted to [startDate, endDate]
+  // when given, since those are period figures not point-in-time balances.
+  const balanceLines = await prisma.journalLine.findMany({
     where: {
-      journalEntry: { organizationId, posted: true },
+      journalEntry: { organizationId, posted: true, ...(endDate ? { postedAt: { lte: endDate } } : {}) },
       accountId: { in: accounts.map((a) => a.id) },
     },
   })
+  const pnlDateFilter: any = {}
+  if (startDate) pnlDateFilter.gte = startDate
+  if (endDate) pnlDateFilter.lte = endDate
+  const pnlLines =
+    startDate || endDate
+      ? await prisma.journalLine.findMany({
+          where: {
+            journalEntry: { organizationId, posted: true, postedAt: pnlDateFilter },
+            accountId: { in: accounts.map((a) => a.id) },
+          },
+        })
+      : balanceLines
 
   const totals: Record<string, number> = { asset: 0, liability: 0, equity: 0, income: 0, expense: 0 }
   let cash = 0
 
-  for (const line of lines) {
+  for (const line of balanceLines) {
     const account = accountsById.get(line.accountId)
     if (!account) continue
     const amount = Number(line.amount)
     const signed = line.isDebit ? amount : -amount
-    totals[account.type] = (totals[account.type] || 0) + signed
+    if (account.type === 'asset' || account.type === 'liability' || account.type === 'equity') {
+      totals[account.type] = (totals[account.type] || 0) + signed
+    }
     if (account.subtype === 'bank') cash += signed
+  }
+  for (const line of pnlLines) {
+    const account = accountsById.get(line.accountId)
+    if (!account) continue
+    if (account.type !== 'income' && account.type !== 'expense') continue
+    const amount = Number(line.amount)
+    const signed = line.isDebit ? amount : -amount
+    totals[account.type] = (totals[account.type] || 0) + signed
   }
 
   const revenue = -totals.income

@@ -9,9 +9,11 @@ type Account = {
   name: string
   type: string
   subtype: string | null
+  cashFlowCategory: string | null
 }
 
 const ACCOUNT_TYPES = ['asset', 'liability', 'equity', 'income', 'expense'] as const
+const CASH_FLOW_CATEGORIES = ['operating', 'investing', 'financing'] as const
 
 function ChartOfAccountsContent() {
   const { token, currentOrg } = useAuth()
@@ -19,7 +21,7 @@ function ChartOfAccountsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ code: '', name: '', type: 'asset', subtype: '' })
+  const [form, setForm] = useState({ code: '', name: '', type: 'asset', subtype: '', cashFlowCategory: '' })
   const [submitting, setSubmitting] = useState(false)
 
   async function loadAccounts() {
@@ -59,13 +61,31 @@ function ChartOfAccountsContent() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Could not create account')
       }
-      setForm({ code: '', name: '', type: 'asset', subtype: '' })
+      setForm({ code: '', name: '', type: 'asset', subtype: '', cashFlowCategory: '' })
       setShowForm(false)
       await loadAccounts()
     } catch (err: any) {
       setError(err.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleCashFlowCategoryChange(accountId: string, cashFlowCategory: string) {
+    setError(null)
+    try {
+      const res = await fetch(`/api/accounts/${accountId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ cashFlowCategory: cashFlowCategory || null }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not update account')
+      }
+      await loadAccounts()
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -140,6 +160,15 @@ function ChartOfAccountsContent() {
             <label htmlFor="subtype" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Subtype (optional)</label>
             <input id="subtype" value={form.subtype} onChange={(e) => setForm({ ...form, subtype: e.target.value })}
               className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Use &quot;bank&quot; to mark this as a cash account (enables cash-flow reporting).</p>
+          </div>
+          <div>
+            <label htmlFor="cashFlowCategory" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Cash-flow category (optional)</label>
+            <select id="cashFlowCategory" value={form.cashFlowCategory} onChange={(e) => setForm({ ...form, cashFlowCategory: e.target.value })}
+              className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
+              <option value="">Operating (default)</option>
+              {CASH_FLOW_CATEGORIES.filter((c) => c !== 'operating').map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <div className="col-span-2">
             <button type="submit" disabled={submitting} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-60">
@@ -164,6 +193,7 @@ function ChartOfAccountsContent() {
                     <th className="px-3 py-2 font-medium">Code</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Subtype</th>
+                    <th className="px-3 py-2 font-medium">Cash-flow category</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,6 +202,16 @@ function ChartOfAccountsContent() {
                       <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{a.code}</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{a.name}</td>
                       <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{a.subtype || '—'}</td>
+                      <td className="px-3 py-2">
+                        <select
+                          value={a.cashFlowCategory || ''}
+                          onChange={(e) => handleCashFlowCategoryChange(a.id, e.target.value)}
+                          className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1 text-xs"
+                        >
+                          <option value="">Operating (default)</option>
+                          {CASH_FLOW_CATEGORIES.filter((c) => c !== 'operating').map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

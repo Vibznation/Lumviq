@@ -123,15 +123,21 @@ export async function eliminateIntercompanyTransaction(tx: any, id: string) {
  * eliminated. Multi-level (grandchild) hierarchies are not supported —
  * see docs/known-limitations.md.
  */
-export async function computeConsolidatedTrialBalance(tx: any, parentOrganizationId: string) {
+export async function computeConsolidatedTrialBalance(tx: any, parentOrganizationId: string, startDate?: Date, endDate?: Date) {
   const children = await tx.organization.findMany({ where: { parentOrganizationId } })
   const orgIds = [parentOrganizationId, ...children.map((c: any) => c.id)]
 
   const accounts = await tx.account.findMany({ where: { organizationId: { in: orgIds } } })
   const accountsById = new Map(accounts.map((a: any) => [a.id, a]))
 
+  const postedAtFilter: any = {}
+  if (startDate) postedAtFilter.gte = startDate
+  if (endDate) postedAtFilter.lte = endDate
   const lines = await tx.journalLine.findMany({
-    where: { accountId: { in: accounts.map((a: any) => a.id) }, journalEntry: { posted: true } },
+    where: {
+      accountId: { in: accounts.map((a: any) => a.id) },
+      journalEntry: { posted: true, ...(Object.keys(postedAtFilter).length ? { postedAt: postedAtFilter } : {}) },
+    },
   })
 
   const balances = new Map<string, number>()

@@ -16,13 +16,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+  const issueDateFilter: any = {}
+  if (startDate) issueDateFilter.gte = startDate
+  if (endDate) issueDateFilter.lte = endDate
+
   const [invoices, bills, rates] = await Promise.all([
     prisma.invoice.findMany({
-      where: { organizationId, voidedAt: null, status: { not: 'draft' } },
+      where: { organizationId, voidedAt: null, status: { not: 'draft' }, ...(Object.keys(issueDateFilter).length ? { issueDate: issueDateFilter } : {}) },
       select: { taxRateId: true, taxTotal: true },
     }),
     prisma.bill.findMany({
-      where: { organizationId, voidedAt: null, status: { not: 'draft' } },
+      where: { organizationId, voidedAt: null, status: { not: 'draft' }, ...(Object.keys(issueDateFilter).length ? { issueDate: issueDateFilter } : {}) },
       select: { taxRateId: true, taxTotal: true },
     }),
     prisma.taxRate.findMany({ where: { organizationId } }),

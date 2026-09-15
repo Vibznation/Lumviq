@@ -10,7 +10,7 @@ function bucketFor(daysOverdue: number) {
   return 'days90plus'
 }
 
-/** Accounts-payable aging: outstanding bill balances bucketed by days past due. */
+/** Accounts-payable aging: outstanding bill balances bucketed by days past due. Accepts an optional `asOfDate` (ISO date string) to compute aging as of a past date instead of now. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).end()
   const user = await requireUserFromRequest(req)
@@ -20,12 +20,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
+  const asOfDate = req.query.asOfDate ? new Date(req.query.asOfDate as string) : new Date()
+
   const bills = await prisma.bill.findMany({
-    where: { organizationId, voidedAt: null, status: { in: ['open', 'partially_paid', 'overdue'] } },
+    where: { organizationId, voidedAt: null, status: { in: ['open', 'partially_paid', 'overdue'] }, issueDate: { lte: asOfDate } },
     include: { vendor: true },
   })
 
-  const now = Date.now()
+  const now = asOfDate.getTime()
   const buckets = { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, days90plus: 0 }
   const rows = bills.map((bill) => {
     const balance = Number(bill.total) - Number(bill.amountPaid)

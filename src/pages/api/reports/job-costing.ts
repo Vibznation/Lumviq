@@ -16,18 +16,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+
   const projects = await prisma.project.findMany({ where: { organizationId }, include: { timeEntries: true, assignments: true } })
 
+  const inRange = (d: Date) => (!startDate || d >= startDate) && (!endDate || d <= endDate)
+
   const rows = projects.map((p) => {
-    const cost = p.timeEntries.reduce((s, t) => s + Number(t.hours) * Number(t.rate || 0), 0)
-    const billedHours = p.timeEntries.filter((t) => t.invoiced).reduce((s, t) => s + Number(t.hours), 0)
-    const revenue = p.timeEntries.filter((t) => t.invoiced).reduce((s, t) => s + Number(t.hours) * Number(t.rate || 0), 0)
+    const entries = startDate || endDate ? p.timeEntries.filter((t) => inRange(t.date)) : p.timeEntries
+    const cost = entries.reduce((s, t) => s + Number(t.hours) * Number(t.rate || 0), 0)
+    const billedHours = entries.filter((t) => t.invoiced).reduce((s, t) => s + Number(t.hours), 0)
+    const revenue = entries.filter((t) => t.invoiced).reduce((s, t) => s + Number(t.hours) * Number(t.rate || 0), 0)
     return {
       projectId: p.id,
       name: p.name,
       status: p.status,
       budgetAmount: p.budgetAmount ? Number(p.budgetAmount) : null,
-      totalHours: p.timeEntries.reduce((s, t) => s + Number(t.hours), 0),
+      totalHours: entries.reduce((s, t) => s + Number(t.hours), 0),
       billedHours,
       laborCost: cost,
       revenueInvoiced: revenue,

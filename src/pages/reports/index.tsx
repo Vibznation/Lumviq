@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/router'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
@@ -9,6 +10,8 @@ type Financials = {
   totalDebits: number
   totalCredits: number
   profitAndLoss: { revenue: number; expenses: number; netIncome: number }
+  comparison?: { revenue: number; expenses: number; netIncome: number }
+  basis: string
   balanceSheet: { totalAssets: number; totalLiabilities: number; totalEquity: number; currentPeriodNetIncome: number; totalLiabilitiesAndEquity: number }
 }
 type AgingRow = { balance: number; daysOverdue: number; bucket: string; [k: string]: any }
@@ -19,12 +22,41 @@ type JobCostingRow = { projectId: string; name: string; status: string; budgetAm
 type ProductProfitabilityRow = { productId: string; name: string; unitsSold: number; revenue: number; cogs: number; grossProfit: number; marginPercent: number | null }
 type Customer = { id: string; name: string }
 type CustomerStatementInvoice = { invoiceNumber: string; issueDate: string; dueDate: string; total: number; amountPaid: number; balance: number; overdue: boolean }
+type AccountOption = { id: string; code: string; name: string; type: string }
+type GlLine = { id: string; accountId: string; description: string | null; amount: string; isDebit: boolean; journalEntryId: string; journalEntryDescription: string | null; postedAt: string | null }
+type CashFlow = { operating: number; investing: number; financing: number; netChangeInCash: number; beginningCash: number; endingCash: number; note?: string }
 
-const TABS = ['Financials', 'AR Aging', 'AP Aging', 'Tax Summary', 'Inventory Valuation', 'Job Costing', 'Product Profitability', 'Customer Statements'] as const
+const TABS = ['Financials', 'General Ledger', 'Cash Flow', 'AR Aging', 'AP Aging', 'Tax Summary', 'Inventory Valuation', 'Job Costing', 'Product Profitability', 'Customer Statements'] as const
 type Tab = (typeof TABS)[number]
 
 function currency(n: number) {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+function downloadCsv(filename: string, columns: string[], rows: Record<string, any>[]) {
+  const escape = (value: any) => {
+    const str = value == null ? '' : String(value)
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+  }
+  const lines = [columns.join(','), ...rows.map((row) => columns.map((c) => escape(row[c])).join(','))]
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  window.URL.revokeObjectURL(url)
+}
+
+function ExportCsvButton({ filename, columns, rows }: { filename: string; columns: string[]; rows: Record<string, any>[] }) {
+  return (
+    <button
+      onClick={() => downloadCsv(filename, columns, rows)}
+      className="text-xs font-medium text-teal-700 dark:text-teal-400 hover:underline"
+    >
+      Export CSV
+    </button>
+  )
 }
 
 function ReportsContent() {
@@ -52,44 +84,95 @@ function ReportsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Phase 4: period filters shared by Financials / Cash Flow / General Ledger / Tax Summary / Job Costing / Product Profitability.
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [compareStartDate, setCompareStartDate] = useState('')
+  const [compareEndDate, setCompareEndDate] = useState('')
+  const [compareEnabled, setCompareEnabled] = useState(false)
+  const [basis, setBasis] = useState<'accrual' | 'cash'>('accrual')
+  const [asOfDate, setAsOfDate] = useState('')
+
+  const [accounts, setAccounts] = useState<AccountOption[]>([])
+  const [glAccountId, setGlAccountId] = useState('')
+  const [glLines, setGlLines] = useState<GlLine[]>([])
+  const [glLoading, setGlLoading] = useState(false)
+  const [cashFlow, setCashFlow] = useState<CashFlow | null>(null)
+
+  function periodParams() {
+    const params = new URLSearchParams()
+    if (startDate) params.set('startDate', startDate)
+    if (endDate) params.set('endDate', endDate)
+    return params
+  }
+
   useEffect(() => {
     if (!currentOrg) return
     setLoading(true)
     setError(null)
+    const p = periodParams()
+    const financialsParams = new URLSearchParams(p)
+    financialsParams.set('basis', basis)
+    if (compareEnabled && compareStartDate) financialsParams.set('compareStartDate', compareStartDate)
+    if (compareEnabled && compareEndDate) financialsParams.set('compareEndDate', compareEndDate)
+    const agingParams = new URLSearchParams()
+    if (asOfDate) agingParams.set('asOfDate', asOfDate)
     Promise.all([
-      fetch(`/api/reports/financials?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
-      fetch(`/api/reports/ar-aging?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
-      fetch(`/api/reports/ap-aging?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
-      fetch(`/api/reports/tax-summary?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/financials?organizationId=${currentOrg.id}&${financialsParams}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/ar-aging?organizationId=${currentOrg.id}&${agingParams}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/ap-aging?organizationId=${currentOrg.id}&${agingParams}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/tax-summary?organizationId=${currentOrg.id}&${p}`, { headers: authHeaders(token) }),
       fetch(`/api/products?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
-      fetch(`/api/reports/job-costing?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
-      fetch(`/api/reports/product-profitability?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/job-costing?organizationId=${currentOrg.id}&${p}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/product-profitability?organizationId=${currentOrg.id}&${p}`, { headers: authHeaders(token) }),
       fetch(`/api/customers?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+      fetch(`/api/accounts?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/cash-flow?organizationId=${currentOrg.id}&${p}`, { headers: authHeaders(token) }),
     ])
-      .then(async ([f, ar, ap, tax, p, jc, pp, c]) => {
+      .then(async ([f, ar, ap, tax, p2, jc, pp, c, acc, cf]) => {
         if (!f.ok) throw new Error('Could not load financial reports')
         setFinancials(await f.json())
         setArAging(ar.ok ? await ar.json() : null)
         setApAging(ap.ok ? await ap.json() : null)
         setTaxSummary(tax.ok ? await tax.json() : null)
-        setProducts(p.ok ? await p.json() : [])
+        setProducts(p2.ok ? await p2.json() : [])
         setJobCosting(jc.ok ? (await jc.json()).projects : [])
         setProductProfitability(pp.ok ? (await pp.json()).products : [])
         const custList = c.ok ? await c.json() : []
         setCustomers(custList)
-        if (custList.length > 0) setStatementCustomerId(custList[0].id)
+        if (custList.length > 0 && !statementCustomerId) setStatementCustomerId(custList[0].id)
+        setAccounts(acc.ok ? await acc.json() : [])
+        setCashFlow(cf.ok ? await cf.json() : null)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [currentOrg?.id, token])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id, token, startDate, endDate, basis, compareEnabled, compareStartDate, compareEndDate, asOfDate])
 
   useEffect(() => {
     if (!currentOrg || !statementCustomerId) return
-    fetch(`/api/reports/customer-statement?organizationId=${currentOrg.id}&customerId=${statementCustomerId}`, { headers: authHeaders(token) })
+    const p = periodParams()
+    fetch(`/api/reports/customer-statement?organizationId=${currentOrg.id}&customerId=${statementCustomerId}&${p}`, { headers: authHeaders(token) })
       .then((r) => (r.ok ? r.json() : { invoices: [] }))
       .then((d) => setStatement(d.invoices))
       .catch(() => setStatement([]))
-  }, [currentOrg?.id, statementCustomerId, token])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id, statementCustomerId, token, startDate, endDate])
+
+  useEffect(() => {
+    if (!currentOrg || !glAccountId) {
+      setGlLines([])
+      return
+    }
+    setGlLoading(true)
+    const p = periodParams()
+    fetch(`/api/journal/lines?organizationId=${currentOrg.id}&accountId=${glAccountId}&${p}`, { headers: authHeaders(token) })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setGlLines(d))
+      .catch(() => setGlLines([]))
+      .finally(() => setGlLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id, glAccountId, token, startDate, endDate])
 
   const inventoryValue = products
     .filter((p) => p.type === 'inventory')
@@ -122,24 +205,89 @@ function ReportsContent() {
         ))}
       </div>
 
+      {(tab === 'Financials' || tab === 'General Ledger' || tab === 'Cash Flow' || tab === 'Tax Summary' || tab === 'Job Costing' || tab === 'Product Profitability' || tab === 'Customer Statements') && (
+        <div className="mb-4 flex flex-wrap items-end gap-4 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Start date</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">End date</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+          </div>
+          {(startDate || endDate) && (
+            <button onClick={() => { setStartDate(''); setEndDate('') }} className="text-xs text-gray-500 hover:underline">Clear dates</button>
+          )}
+          {tab === 'Financials' && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Basis</label>
+                <select value={basis} onChange={(e) => setBasis(e.target.value as 'accrual' | 'cash')} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
+                  <option value="accrual">Accrual</option>
+                  <option value="cash">Cash</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <input type="checkbox" checked={compareEnabled} onChange={(e) => setCompareEnabled(e.target.checked)} />
+                Compare to another period
+              </label>
+              {compareEnabled && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Compare start</label>
+                    <input type="date" value={compareStartDate} onChange={(e) => setCompareStartDate(e.target.value)} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Compare end</label>
+                    <input type="date" value={compareEndDate} onChange={(e) => setCompareEndDate(e.target.value)} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {(tab === 'AR Aging' || tab === 'AP Aging') && (
+        <div className="mb-4 flex items-end gap-4 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">As of date</label>
+            <input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+          </div>
+          {asOfDate && <button onClick={() => setAsOfDate('')} className="text-xs text-gray-500 hover:underline">Reset to today</button>}
+        </div>
+      )}
+
       {loading ? (
         <p className="text-sm text-gray-500">Loading…</p>
       ) : (
         <>
           {tab === 'Financials' && financials && (
             <div className="space-y-6">
-              <div className="grid grid-cols-3 gap-4 max-w-2xl">
-                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
-                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.revenue)}</p>
+              <div className="flex items-center justify-between max-w-2xl">
+                <div className="grid grid-cols-3 gap-4 flex-1">
+                  <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Revenue</p>
+                    <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.revenue)}</p>
+                    {financials.comparison && <p className="text-xs text-gray-400 mt-1">vs {currency(financials.comparison.revenue)}</p>}
+                  </div>
+                  <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Expenses</p>
+                    <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.expenses)}</p>
+                    {financials.comparison && <p className="text-xs text-gray-400 mt-1">vs {currency(financials.comparison.expenses)}</p>}
+                  </div>
+                  <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Net income</p>
+                    <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.netIncome)}</p>
+                    {financials.comparison && <p className="text-xs text-gray-400 mt-1">vs {currency(financials.comparison.netIncome)}</p>}
+                  </div>
                 </div>
-                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Expenses</p>
-                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.expenses)}</p>
-                </div>
-                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Net income</p>
-                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(financials.profitAndLoss.netIncome)}</p>
+                <div className="pl-4 self-start pt-1">
+                  <ExportCsvButton
+                    filename="trial-balance.csv"
+                    columns={['code', 'name', 'type', 'debitBalance', 'creditBalance']}
+                    rows={financials.trialBalance}
+                  />
                 </div>
               </div>
 
@@ -166,7 +314,11 @@ function ReportsContent() {
                     <tbody>
                       {financials.trialBalance.filter((r) => r.debitBalance !== 0 || r.creditBalance !== 0).map((r) => (
                         <tr key={r.accountId} className="border-t border-gray-100 dark:border-midnight-800">
-                          <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{r.code} {r.name}</td>
+                          <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
+                            <Link href={`/accounting/general-ledger/${r.accountId}`} className="text-teal-700 dark:text-teal-400 hover:underline">
+                              {r.code} {r.name}
+                            </Link>
+                          </td>
                           <td className="px-4 py-2 text-right">{r.debitBalance !== 0 ? currency(r.debitBalance) : ''}</td>
                           <td className="px-4 py-2 text-right">{r.creditBalance !== 0 ? currency(r.creditBalance) : ''}</td>
                         </tr>
@@ -182,6 +334,89 @@ function ReportsContent() {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {tab === 'General Ledger' && (
+            <div className="space-y-4">
+              <div className="max-w-xs">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Account</label>
+                <select
+                  value={glAccountId}
+                  onChange={(e) => setGlAccountId(e.target.value)}
+                  className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Select an account…</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.code} {a.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {!glAccountId && <p className="text-sm text-gray-500 dark:text-gray-400">Choose an account to view its ledger activity.</p>}
+
+              {glAccountId && glLoading && <p className="text-sm text-gray-500">Loading…</p>}
+
+              {glAccountId && !glLoading && (
+                <div>
+                  <div className="flex justify-end mb-2">
+                    <ExportCsvButton
+                      filename="general-ledger.csv"
+                      columns={['postedAt', 'journalEntryDescription', 'description', 'isDebit', 'amount']}
+                      rows={glLines}
+                    />
+                  </div>
+                  <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden max-w-3xl">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                        <tr><th className="px-4 py-2">Date</th><th className="px-4 py-2">Description</th><th className="px-4 py-2 text-right">Debit</th><th className="px-4 py-2 text-right">Credit</th></tr>
+                      </thead>
+                      <tbody>
+                        {glLines.length === 0 && (
+                          <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400">No activity for this account in the selected period.</td></tr>
+                        )}
+                        {glLines.map((l) => (
+                          <tr key={l.id} className="border-t border-gray-100 dark:border-midnight-800">
+                            <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{l.postedAt ? new Date(l.postedAt).toLocaleDateString() : '—'}</td>
+                            <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{l.description || l.journalEntryDescription || '—'}</td>
+                            <td className="px-4 py-2 text-right">{l.isDebit ? currency(Number(l.amount)) : ''}</td>
+                            <td className="px-4 py-2 text-right">{!l.isDebit ? currency(Number(l.amount)) : ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'Cash Flow' && cashFlow && (
+            <div className="space-y-4">
+              {cashFlow.note && (
+                <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 max-w-2xl">{cashFlow.note}</div>
+              )}
+              <div className="grid grid-cols-3 gap-4 max-w-3xl">
+                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Operating</p>
+                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(cashFlow.operating)}</p>
+                </div>
+                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Investing</p>
+                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(cashFlow.investing)}</p>
+                </div>
+                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Financing</p>
+                  <p className="text-lg font-semibold text-midnight-900 dark:text-white">{currency(cashFlow.financing)}</p>
+                </div>
+              </div>
+              <table className="text-sm max-w-md">
+                <tbody>
+                  <tr className="border-b border-gray-100 dark:border-midnight-800"><td className="py-1 text-gray-600 dark:text-gray-400">Beginning cash</td><td className="py-1 text-right">{currency(cashFlow.beginningCash)}</td></tr>
+                  <tr className="border-b border-gray-100 dark:border-midnight-800"><td className="py-1 text-gray-600 dark:text-gray-400">Net change in cash</td><td className="py-1 text-right">{currency(cashFlow.netChangeInCash)}</td></tr>
+                  <tr className="font-semibold"><td className="py-1 text-midnight-900 dark:text-white">Ending cash</td><td className="py-1 text-right">{currency(cashFlow.endingCash)}</td></tr>
+                </tbody>
+              </table>
             </div>
           )}
 

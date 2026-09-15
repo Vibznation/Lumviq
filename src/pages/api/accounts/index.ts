@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { organizationId, code, name, type, subtype } = req.body || {}
+    const { organizationId, code, name, type, subtype, cashFlowCategory } = req.body || {}
     if (!organizationId || !code || !name || !type) {
       return res.status(400).json({ error: 'organizationId, code, name and type are required' })
     }
@@ -31,11 +31,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!validTypes.includes(type)) {
       return res.status(400).json({ error: `type must be one of ${validTypes.join(', ')}` })
     }
+    const validCashFlowCategories = ['operating', 'investing', 'financing']
+    if (cashFlowCategory && !validCashFlowCategories.includes(cashFlowCategory)) {
+      return res.status(400).json({ error: `cashFlowCategory must be one of ${validCashFlowCategories.join(', ')}` })
+    }
     const existing = await prisma.account.findFirst({ where: { organizationId, code } })
     if (existing) return res.status(409).json({ error: 'An account with this code already exists' })
 
     const account = await prisma.account.create({
-      data: { organizationId, code, name, type, subtype: subtype || null },
+      data: { organizationId, code, name, type, subtype: subtype || null, cashFlowCategory: cashFlowCategory || null },
     })
     await prisma.auditEvent.create({
       data: {
@@ -44,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         action: 'create_account',
         resourceType: 'account',
         resourceId: account.id,
-        newState: { code, name, type, subtype: subtype || null },
+        newState: { code, name, type, subtype: subtype || null, cashFlowCategory: cashFlowCategory || null },
       },
     })
     return res.status(201).json(account)

@@ -9,8 +9,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!organizationId) return res.status(400).json([])
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
   const accountId = req.query.accountId as string | undefined
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+  const postedAtFilter: any = {}
+  if (startDate) postedAtFilter.gte = startDate
+  if (endDate) postedAtFilter.lte = endDate
   const lines = await prisma.journalLine.findMany({
-    where: { journalEntry: { organizationId }, ...(accountId ? { accountId } : {}) },
+    where: {
+      ...(accountId ? { accountId } : {}),
+      journalEntry: {
+        organizationId,
+        ...(Object.keys(postedAtFilter).length ? { postedAt: postedAtFilter } : {}),
+      },
+    },
     include: { journalEntry: true },
     orderBy: { journalEntry: { postedAt: 'asc' } },
   })

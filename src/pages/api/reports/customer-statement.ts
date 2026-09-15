@@ -15,8 +15,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!customer) return res.status(404).json({ error: 'Customer not found' })
   if (!(await userHasMembership(user.id, customer.organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+  const issueDateFilter: any = {}
+  if (startDate) issueDateFilter.gte = startDate
+  if (endDate) issueDateFilter.lte = endDate
+
   const invoices = await prisma.invoice.findMany({
-    where: { customerId, voidedAt: null, status: { in: ['sent', 'partially_paid', 'paid'] } },
+    where: {
+      customerId,
+      voidedAt: null,
+      status: { in: ['sent', 'partially_paid', 'paid'] },
+      ...(Object.keys(issueDateFilter).length ? { issueDate: issueDateFilter } : {}),
+    },
     include: { payments: true },
     orderBy: { issueDate: 'desc' },
   })

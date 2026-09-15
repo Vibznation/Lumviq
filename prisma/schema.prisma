@@ -164,6 +164,7 @@ model Account {
   name           String
   type           String
   subtype        String?
+  cashFlowCategory String?     @map("cash_flow_category")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)

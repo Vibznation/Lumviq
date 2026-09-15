@@ -17,12 +17,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
 
+  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+  const issueDateFilter: any = {}
+  if (startDate) issueDateFilter.gte = startDate
+  if (endDate) issueDateFilter.lte = endDate
+  const createdAtFilter: any = {}
+  if (startDate) createdAtFilter.gte = startDate
+  if (endDate) createdAtFilter.lte = endDate
+
   const products = await prisma.product.findMany({ where: { organizationId } })
   const invoiceLines = await prisma.invoiceLine.findMany({
-    where: { invoice: { organizationId, voidedAt: null }, NOT: { productId: null } },
+    where: {
+      invoice: { organizationId, voidedAt: null, ...(Object.keys(issueDateFilter).length ? { issueDate: issueDateFilter } : {}) },
+      NOT: { productId: null },
+    },
   })
   const saleMovements = await prisma.stockMovement.findMany({
-    where: { organizationId, type: 'sale' },
+    where: { organizationId, type: 'sale', ...(Object.keys(createdAtFilter).length ? { createdAt: createdAtFilter } : {}) },
   })
 
   const rows = products.map((p) => {
