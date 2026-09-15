@@ -20,7 +20,7 @@ const path = require('path')
 // root .env consumed by the Prisma CLI. Load it manually, without adding a
 // new dependency, before requiring @prisma/client.
 function loadEnvLocal() {
-  const envPath = path.join(__dirname, '..', '.env.local')
+  const envPath = path.join(__dirname, '..', process.env.GRANT_ENV_FILE || '.env.local')
   if (!fs.existsSync(envPath)) return
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
     const trimmed = line.trim()
@@ -32,6 +32,11 @@ function loadEnvLocal() {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1)
     }
+    // `vercel env pull` sometimes stores a literal trailing "\r\n"/"\n"/"\r"
+    // escape sequence inside the quoted value (from a value that was
+    // originally pasted/added with a trailing newline) rather than an
+    // actual line break. Strip that artifact so the URL parses correctly.
+    value = value.replace(/\\r\\n$|\\n$|\\r$/, '')
     if (!(key in process.env)) process.env[key] = value
   }
 }
