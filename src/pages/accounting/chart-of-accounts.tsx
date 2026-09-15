@@ -84,6 +84,12 @@ function ChartOfAccountsContent() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/accounting/journal-entries" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Journal entries
+          </Link>
+          <Link href="/accounting/general-ledger" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            General ledger
+          </Link>
           <Link href="/accounting/reconcile-account" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
             Reconcile an account
           </Link>

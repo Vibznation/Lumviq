@@ -20,6 +20,7 @@ function CloseChecklistContent() {
   const [items, setItems] = useState<ChecklistItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function loadPeriods() {
@@ -101,7 +102,32 @@ function CloseChecklistContent() {
     }
   }
 
+  async function closePeriod() {
+    if (!periodId) return
+    setBusy(true)
+    setError(null)
+    setNotice(null)
+    try {
+      const res = await fetch(`/api/accounting-periods/${periodId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not close period')
+      }
+      setNotice('Period closed. No further postings will be accepted for these dates.')
+      await loadPeriods()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const completeCount = items.filter((i) => i.status === 'complete').length
+  const currentPeriod = periods.find((p) => p.id === periodId)
+  const allComplete = items.length > 0 && completeCount === items.length
 
   return (
     <div className="max-w-2xl">
@@ -111,6 +137,12 @@ function CloseChecklistContent() {
           <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/accounting/journal-entries" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Journal entries
+          </Link>
+          <Link href="/accounting/general-ledger" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            General ledger
+          </Link>
           <Link href="/accounting/chart-of-accounts" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
             Chart of accounts
           </Link>
@@ -129,6 +161,11 @@ function CloseChecklistContent() {
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div role="status" className="mb-4 text-sm text-teal-800 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">
+          {notice}
         </div>
       )}
 
@@ -167,8 +204,20 @@ function CloseChecklistContent() {
         </div>
       ) : (
         <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden">
-          <div className="px-4 py-2 border-b border-gray-100 dark:border-midnight-800 text-xs text-gray-500 dark:text-gray-400">
-            {completeCount} of {items.length} complete
+          <div className="px-4 py-2 border-b border-gray-100 dark:border-midnight-800 flex items-center justify-between">
+            <span className="text-xs text-gray-500 dark:text-gray-400">{completeCount} of {items.length} complete</span>
+            {currentPeriod?.isClosed ? (
+              <span className="text-xs text-gray-500 dark:text-gray-400">Period closed</span>
+            ) : (
+              <button
+                onClick={closePeriod}
+                disabled={busy || !allComplete}
+                title={allComplete ? undefined : 'Complete every checklist item before closing the period'}
+                className="rounded-md bg-teal-600 text-white px-3 py-1 text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
+              >
+                Close period
+              </button>
+            )}
           </div>
           <ul>
             {items.map((item) => (

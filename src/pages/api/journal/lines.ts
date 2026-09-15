@@ -8,8 +8,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const organizationId = req.query.organizationId as string | undefined
   if (!organizationId) return res.status(400).json([])
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
-  const lines = await prisma.journalLine.findMany({ where: { journalEntry: { organizationId } }, include: { journalEntry: true } })
+  const accountId = req.query.accountId as string | undefined
+  const lines = await prisma.journalLine.findMany({
+    where: { journalEntry: { organizationId }, ...(accountId ? { accountId } : {}) },
+    include: { journalEntry: true },
+    orderBy: { journalEntry: { postedAt: 'asc' } },
+  })
   // map to lightweight objects
-  const mapped = lines.map(l => ({ id: l.id, description: l.description, amount: l.amount.toString(), journalEntryId: l.journalEntryId, journalEntryDescription: l.journalEntry.description }))
+  const mapped = lines.map(l => ({
+    id: l.id,
+    accountId: l.accountId,
+    description: l.description,
+    amount: l.amount.toString(),
+    isDebit: l.isDebit,
+    journalEntryId: l.journalEntryId,
+    journalEntryDescription: l.journalEntry.description,
+    postedAt: l.journalEntry.postedAt,
+  }))
   return res.status(200).json(mapped)
 }
