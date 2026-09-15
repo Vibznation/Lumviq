@@ -30,9 +30,13 @@ type Contractor = {
   id: string
   name: string
   email: string | null
+  businessName: string | null
+  taxClassification: string | null
+  paymentMethod: string
   w9Status: string
   providerContractorId: string | null
   active: boolean
+  is1099Eligible?: boolean
 }
 type CompanyProfile = {
   id: string
@@ -112,6 +116,7 @@ function useApi(token: string | null) {
   return {
     get: (path: string) => call('GET', path),
     post: (path: string, body?: any) => call('POST', path, body),
+    patch: (path: string, body?: any) => call('PATCH', path, body),
   }
 }
 
@@ -397,7 +402,7 @@ function SetupTab({ orgId, api, onError }: { orgId: string; api: ReturnType<type
   )
 }
 
-function EmployeesTab({ orgId, api, onError }: { orgId: string; api: ReturnType<typeof useApi>; onError: (m: string | null) => void }) {
+function EmployeesTab({ orgId, api, onError, providerConnected }: { orgId: string; api: ReturnType<typeof useApi>; onError: (m: string | null) => void; providerConnected: boolean }) {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -407,6 +412,15 @@ function EmployeesTab({ orgId, api, onError }: { orgId: string; api: ReturnType<
   const [taxForm, setTaxForm] = useState({ filingStatus: 'single', state: '', exemptFromFederal: false, exemptFromState: false })
   const [ddForm, setDdForm] = useState({ routingNumber: '', accountNumber: '', bankName: '', splitType: 'remainder' })
   const [ddResult, setDdResult] = useState<Record<string, string>>({})
+  const [profileForm, setProfileForm] = useState({
+    preferredName: '', phone: '', addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '',
+    dateOfBirth: '', ssn: '', employmentStatus: 'active', hireDate: '', department: '', jobTitle: '',
+  })
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [deductions, setDeductions] = useState<Record<string, any[]>>({})
+  const [dedForm, setDedForm] = useState({ category: '', taxTreatment: 'pretax', employeeAmount: '', effectiveDate: '' })
+  const [garnishments, setGarnishments] = useState<Record<string, any[]>>({})
+  const [garnForm, setGarnForm] = useState({ garnishmentType: '', amount: '', effectiveDate: '' })
 
   async function load() {
     setLoading(true)
@@ -467,6 +481,81 @@ function EmployeesTab({ orgId, api, onError }: { orgId: string; api: ReturnType<
     }
   }
 
+  async function saveProfile(id: string) {
+    setSavingProfile(true)
+    onError(null)
+    try {
+      const body: any = { ...profileForm }
+      if (!body.ssn) delete body.ssn
+      await api.patch(`/api/employees/${id}`, body)
+      await load()
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  async function loadDeductionsAndGarnishments(id: string) {
+    try {
+      const [d, g] = await Promise.all([
+        api.get(`/api/employees/${id}/deductions`),
+        api.get(`/api/employees/${id}/garnishments`),
+      ])
+      setDeductions((m) => ({ ...m, [id]: d }))
+      setGarnishments((m) => ({ ...m, [id]: g }))
+    } catch (err: any) {
+      onError(err.message)
+    }
+  }
+
+  async function addDeduction(id: string) {
+    onError(null)
+    try {
+      await api.post(`/api/employees/${id}/deductions`, dedForm)
+      setDedForm({ category: '', taxTreatment: 'pretax', employeeAmount: '', effectiveDate: '' })
+      await loadDeductionsAndGarnishments(id)
+    } catch (err: any) {
+      onError(err.message)
+    }
+  }
+
+  async function addGarnishment(id: string) {
+    onError(null)
+    try {
+      await api.post(`/api/employees/${id}/garnishments`, garnForm)
+      setGarnForm({ garnishmentType: '', amount: '', effectiveDate: '' })
+      await loadDeductionsAndGarnishments(id)
+    } catch (err: any) {
+      onError(err.message)
+    }
+  }
+
+  function toggleExpanded(id: string) {
+    const next = expanded === id ? null : id
+    setExpanded(next)
+    if (next) {
+      loadDeductionsAndGarnishments(next)
+      api.get(`/api/employees/${next}`).then((e) => {
+        setProfileForm({
+          preferredName: e.preferredName || '',
+          phone: e.phone || '',
+          addressLine1: e.addressLine1 || '',
+          addressLine2: e.addressLine2 || '',
+          city: e.city || '',
+          state: e.state || '',
+          postalCode: e.postalCode || '',
+          dateOfBirth: e.dateOfBirth ? String(e.dateOfBirth).slice(0, 10) : '',
+          ssn: '',
+          employmentStatus: e.employmentStatus || 'active',
+          hireDate: e.hireDate ? String(e.hireDate).slice(0, 10) : '',
+          department: e.department || '',
+          jobTitle: e.jobTitle || '',
+        })
+      }).catch(() => {})
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
@@ -508,43 +597,118 @@ function EmployeesTab({ orgId, api, onError }: { orgId: string; api: ReturnType<
                     {emp.providerEmployeeId ? ' · Onboarded with provider' : ' · Not onboarded'}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  {!emp.providerEmployeeId && (
-                    <button onClick={() => onboard(emp.id)} className={btnSecondary}>Onboard with provider</button>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex gap-2">
+                    {!emp.providerEmployeeId && (
+                      <button onClick={() => onboard(emp.id)} disabled={!providerConnected} className={btnSecondary} title={!providerConnected ? 'Connect a payroll provider in Settings → Integrations to onboard employees' : undefined}>
+                        Onboard with provider
+                      </button>
+                    )}
+                    <button onClick={() => toggleExpanded(emp.id)} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+                      {expanded === emp.id ? 'Close' : 'Tax & direct deposit'}
+                    </button>
+                  </div>
+                  {!emp.providerEmployeeId && !providerConnected && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 max-w-[220px] text-right">
+                      Connect a payroll provider in <a className="underline" href="/settings/integrations">Settings → Integrations</a> to onboard employees.
+                    </p>
                   )}
-                  <button onClick={() => setExpanded(expanded === emp.id ? null : emp.id)} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
-                    {expanded === emp.id ? 'Close' : 'Tax & direct deposit'}
-                  </button>
                 </div>
               </div>
               {expanded === emp.id && (
-                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-midnight-800 grid grid-cols-2 gap-4">
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-midnight-800 space-y-4">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Federal/state withholding</p>
-                    <div className="space-y-2">
-                      <select className={inputCls} value={taxForm.filingStatus} onChange={(e) => setTaxForm((f) => ({ ...f, filingStatus: e.target.value }))}>
-                        <option value="single">Single</option>
-                        <option value="married_filing_jointly">Married filing jointly</option>
-                        <option value="head_of_household">Head of household</option>
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                      Profile — legal identity, residential address, work details
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input placeholder="Preferred name" className={inputCls} value={profileForm.preferredName} onChange={(e) => setProfileForm((f) => ({ ...f, preferredName: e.target.value }))} />
+                      <input placeholder="Phone" className={inputCls} value={profileForm.phone} onChange={(e) => setProfileForm((f) => ({ ...f, phone: e.target.value }))} />
+                      <input type="date" placeholder="Date of birth" className={inputCls} value={profileForm.dateOfBirth} onChange={(e) => setProfileForm((f) => ({ ...f, dateOfBirth: e.target.value }))} />
+                      <input placeholder="SSN (encrypted at rest)" className={inputCls} value={profileForm.ssn} onChange={(e) => setProfileForm((f) => ({ ...f, ssn: e.target.value }))} />
+                      <input placeholder="Address line 1" className={inputCls} value={profileForm.addressLine1} onChange={(e) => setProfileForm((f) => ({ ...f, addressLine1: e.target.value }))} />
+                      <input placeholder="Address line 2" className={inputCls} value={profileForm.addressLine2} onChange={(e) => setProfileForm((f) => ({ ...f, addressLine2: e.target.value }))} />
+                      <input placeholder="City" className={inputCls} value={profileForm.city} onChange={(e) => setProfileForm((f) => ({ ...f, city: e.target.value }))} />
+                      <input placeholder="State" maxLength={2} className={inputCls} value={profileForm.state} onChange={(e) => setProfileForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))} />
+                      <input placeholder="Postal code" className={inputCls} value={profileForm.postalCode} onChange={(e) => setProfileForm((f) => ({ ...f, postalCode: e.target.value }))} />
+                      <select className={inputCls} value={profileForm.employmentStatus} onChange={(e) => setProfileForm((f) => ({ ...f, employmentStatus: e.target.value }))}>
+                        <option value="active">Active</option>
+                        <option value="on_leave">On leave</option>
+                        <option value="terminated">Terminated</option>
                       </select>
-                      <input placeholder="State (e.g. CA)" className={inputCls} value={taxForm.state} onChange={(e) => setTaxForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))} maxLength={2} />
-                      <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <input type="checkbox" checked={taxForm.exemptFromFederal} onChange={(e) => setTaxForm((f) => ({ ...f, exemptFromFederal: e.target.checked }))} /> Exempt from federal withholding
-                      </label>
-                      <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                        <input type="checkbox" checked={taxForm.exemptFromState} onChange={(e) => setTaxForm((f) => ({ ...f, exemptFromState: e.target.checked }))} /> Exempt from state withholding
-                      </label>
-                      <button onClick={() => saveTaxProfile(emp.id)} className={btnSecondary}>Save tax profile</button>
+                      <input type="date" placeholder="Hire date" className={inputCls} value={profileForm.hireDate} onChange={(e) => setProfileForm((f) => ({ ...f, hireDate: e.target.value }))} />
+                      <input placeholder="Department" className={inputCls} value={profileForm.department} onChange={(e) => setProfileForm((f) => ({ ...f, department: e.target.value }))} />
+                      <input placeholder="Job title" className={inputCls} value={profileForm.jobTitle} onChange={(e) => setProfileForm((f) => ({ ...f, jobTitle: e.target.value }))} />
+                    </div>
+                    <button onClick={() => saveProfile(emp.id)} disabled={savingProfile} className={`${btnSecondary} mt-2`}>
+                      {savingProfile ? 'Saving…' : 'Save profile'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Federal/state withholding</p>
+                      <div className="space-y-2">
+                        <select className={inputCls} value={taxForm.filingStatus} onChange={(e) => setTaxForm((f) => ({ ...f, filingStatus: e.target.value }))}>
+                          <option value="single">Single</option>
+                          <option value="married_filing_jointly">Married filing jointly</option>
+                          <option value="head_of_household">Head of household</option>
+                        </select>
+                        <input placeholder="State (e.g. CA)" className={inputCls} value={taxForm.state} onChange={(e) => setTaxForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))} maxLength={2} />
+                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          <input type="checkbox" checked={taxForm.exemptFromFederal} onChange={(e) => setTaxForm((f) => ({ ...f, exemptFromFederal: e.target.checked }))} /> Exempt from federal withholding
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                          <input type="checkbox" checked={taxForm.exemptFromState} onChange={(e) => setTaxForm((f) => ({ ...f, exemptFromState: e.target.checked }))} /> Exempt from state withholding
+                        </label>
+                        <button onClick={() => saveTaxProfile(emp.id)} className={btnSecondary}>Save tax profile</button>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Direct deposit</p>
+                      <div className="space-y-2">
+                        <input placeholder="Bank name" className={inputCls} value={ddForm.bankName} onChange={(e) => setDdForm((f) => ({ ...f, bankName: e.target.value }))} />
+                        <input placeholder="Routing number" className={inputCls} value={ddForm.routingNumber} onChange={(e) => setDdForm((f) => ({ ...f, routingNumber: e.target.value }))} />
+                        <input placeholder="Account number" className={inputCls} value={ddForm.accountNumber} onChange={(e) => setDdForm((f) => ({ ...f, accountNumber: e.target.value }))} />
+                        <button onClick={() => saveDirectDeposit(emp.id)} className={btnSecondary}>Save direct deposit</button>
+                        {ddResult[emp.id] && <p className="text-xs text-gray-400">Sandbox test amounts: {ddResult[emp.id]}</p>}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Direct deposit</p>
-                    <div className="space-y-2">
-                      <input placeholder="Bank name" className={inputCls} value={ddForm.bankName} onChange={(e) => setDdForm((f) => ({ ...f, bankName: e.target.value }))} />
-                      <input placeholder="Routing number" className={inputCls} value={ddForm.routingNumber} onChange={(e) => setDdForm((f) => ({ ...f, routingNumber: e.target.value }))} />
-                      <input placeholder="Account number" className={inputCls} value={ddForm.accountNumber} onChange={(e) => setDdForm((f) => ({ ...f, accountNumber: e.target.value }))} />
-                      <button onClick={() => saveDirectDeposit(emp.id)} className={btnSecondary}>Save direct deposit</button>
-                      {ddResult[emp.id] && <p className="text-xs text-gray-400">Sandbox test amounts: {ddResult[emp.id]}</p>}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Deductions & benefits</p>
+                      {(deductions[emp.id] || []).map((d) => (
+                        <p key={d.id} className="text-xs text-gray-500 dark:text-gray-400">
+                          {d.category} · {d.taxTreatment} · {currency(d.employeeAmount)}
+                        </p>
+                      ))}
+                      <div className="space-y-2 mt-2">
+                        <input placeholder="Category (e.g. 401k, health_insurance)" className={inputCls} value={dedForm.category} onChange={(e) => setDedForm((f) => ({ ...f, category: e.target.value }))} />
+                        <select className={inputCls} value={dedForm.taxTreatment} onChange={(e) => setDedForm((f) => ({ ...f, taxTreatment: e.target.value }))}>
+                          <option value="pretax">Pretax</option>
+                          <option value="posttax">Posttax</option>
+                          <option value="employer_only">Employer only</option>
+                        </select>
+                        <input placeholder="Employee amount" className={inputCls} value={dedForm.employeeAmount} onChange={(e) => setDedForm((f) => ({ ...f, employeeAmount: e.target.value }))} />
+                        <input type="date" placeholder="Effective date" className={inputCls} value={dedForm.effectiveDate} onChange={(e) => setDedForm((f) => ({ ...f, effectiveDate: e.target.value }))} />
+                        <button onClick={() => addDeduction(emp.id)} className={btnSecondary}>+ Add deduction</button>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Garnishments</p>
+                      {(garnishments[emp.id] || []).map((g) => (
+                        <p key={g.id} className="text-xs text-gray-500 dark:text-gray-400">
+                          {g.garnishmentType} · {currency(g.amount)}
+                        </p>
+                      ))}
+                      <div className="space-y-2 mt-2">
+                        <input placeholder="Type (e.g. child_support)" className={inputCls} value={garnForm.garnishmentType} onChange={(e) => setGarnForm((f) => ({ ...f, garnishmentType: e.target.value }))} />
+                        <input placeholder="Amount" className={inputCls} value={garnForm.amount} onChange={(e) => setGarnForm((f) => ({ ...f, amount: e.target.value }))} />
+                        <input type="date" placeholder="Effective date" className={inputCls} value={garnForm.effectiveDate} onChange={(e) => setGarnForm((f) => ({ ...f, effectiveDate: e.target.value }))} />
+                        <button onClick={() => addGarnishment(emp.id)} className={btnSecondary}>+ Add garnishment</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -557,11 +721,11 @@ function EmployeesTab({ orgId, api, onError }: { orgId: string; api: ReturnType<
   )
 }
 
-function ContractorsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<typeof useApi>; onError: (m: string | null) => void }) {
+function ContractorsTab({ orgId, api, onError, providerConnected }: { orgId: string; api: ReturnType<typeof useApi>; onError: (m: string | null) => void; providerConnected: boolean }) {
   const [contractors, setContractors] = useState<Contractor[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', taxIdLast4: '' })
+  const [form, setForm] = useState({ name: '', email: '', taxIdLast4: '', businessName: '', taxClassification: 'individual', taxId: '', paymentMethod: 'check' })
   const [saving, setSaving] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [ddForm, setDdForm] = useState({ routingNumber: '', accountNumber: '', bankName: '' })
@@ -584,8 +748,9 @@ function ContractorsTab({ orgId, api, onError }: { orgId: string; api: ReturnTyp
     setSaving(true)
     onError(null)
     try {
-      await api.post('/api/contractors', { organizationId: orgId, ...form })
-      setForm({ name: '', email: '', taxIdLast4: '' })
+      const { taxId, ...rest } = form
+      await api.post('/api/contractors', { organizationId: orgId, ...rest, ...(taxId ? { taxId } : {}) })
+      setForm({ name: '', email: '', taxIdLast4: '', businessName: '', taxClassification: 'individual', taxId: '', paymentMethod: 'check' })
       setShowForm(false)
       await load()
     } catch (err: any) {
@@ -629,7 +794,26 @@ function ContractorsTab({ orgId, api, onError }: { orgId: string; api: ReturnTyp
         <form onSubmit={createContractor} className="mb-4 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 grid grid-cols-2 gap-3 max-w-lg">
           <Field label="Name"><input required className={inputCls} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></Field>
           <Field label="Email"><input className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></Field>
-          <Field label="Tax ID last 4 (W-9)"><input className={inputCls} value={form.taxIdLast4} onChange={(e) => setForm((f) => ({ ...f, taxIdLast4: e.target.value }))} maxLength={4} /></Field>
+          <Field label="Business name (if applicable)"><input className={inputCls} value={form.businessName} onChange={(e) => setForm((f) => ({ ...f, businessName: e.target.value }))} /></Field>
+          <Field label="W-9 tax classification">
+            <select className={inputCls} value={form.taxClassification} onChange={(e) => setForm((f) => ({ ...f, taxClassification: e.target.value }))}>
+              <option value="individual">Individual</option>
+              <option value="sole_proprietor">Sole proprietor</option>
+              <option value="llc">LLC</option>
+              <option value="partnership">Partnership</option>
+              <option value="s_corp">S corp (generally 1099-exempt)</option>
+              <option value="c_corp">C corp (generally 1099-exempt)</option>
+              <option value="other">Other</option>
+            </select>
+          </Field>
+          <Field label="Tax ID (SSN/EIN — encrypted at rest)"><input className={inputCls} value={form.taxId} onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value }))} placeholder="Leave blank if only last 4 known" /></Field>
+          <Field label="Tax ID last 4 (if full ID unavailable)"><input className={inputCls} value={form.taxIdLast4} onChange={(e) => setForm((f) => ({ ...f, taxIdLast4: e.target.value }))} maxLength={4} /></Field>
+          <Field label="Payment method">
+            <select className={inputCls} value={form.paymentMethod} onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}>
+              <option value="check">Check (via vendor bill)</option>
+              <option value="direct_deposit">Direct deposit</option>
+            </select>
+          </Field>
           <div className="col-span-2">
             <button type="submit" disabled={saving} className={btnPrimary}>{saving ? 'Saving…' : 'Save contractor'}</button>
           </div>
@@ -645,16 +829,34 @@ function ContractorsTab({ orgId, api, onError }: { orgId: string; api: ReturnTyp
             <div key={c.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-midnight-900 dark:text-white">{c.name}</p>
+                  <p className="text-sm font-medium text-midnight-900 dark:text-white">
+                    {c.name}{c.businessName ? ` (${c.businessName})` : ''}
+                  </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     W-9: {c.w9Status}{c.providerContractorId ? ' · Onboarded with provider' : ' · Not onboarded'}
+                    {c.taxClassification ? ` · ${c.taxClassification.replace(/_/g, ' ')}` : ''}
+                    {' · '}{c.paymentMethod === 'direct_deposit' ? 'Direct deposit' : 'Check (vendor bill)'}
+                    {typeof c.is1099Eligible === 'boolean' && (
+                      <> · {c.is1099Eligible ? '1099-eligible' : 'Not 1099-eligible'}</>
+                    )}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  {!c.providerContractorId && <button onClick={() => onboard(c.id)} className={btnSecondary}>Onboard with provider</button>}
-                  <button onClick={() => setExpanded(expanded === c.id ? null : c.id)} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
-                    {expanded === c.id ? 'Close' : 'Direct deposit'}
-                  </button>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex gap-2">
+                    {!c.providerContractorId && (
+                      <button onClick={() => onboard(c.id)} disabled={!providerConnected} className={btnSecondary} title={!providerConnected ? 'Connect a payroll provider in Settings → Integrations to onboard contractors' : undefined}>
+                        Onboard with provider
+                      </button>
+                    )}
+                    <button onClick={() => setExpanded(expanded === c.id ? null : c.id)} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+                      {expanded === c.id ? 'Close' : 'Direct deposit'}
+                    </button>
+                  </div>
+                  {!c.providerContractorId && !providerConnected && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 max-w-[220px] text-right">
+                      Connect a payroll provider in <a className="underline" href="/settings/integrations">Settings → Integrations</a> to onboard contractors.
+                    </p>
+                  )}
                 </div>
               </div>
               {expanded === c.id && (
@@ -832,10 +1034,15 @@ function PayRunsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<ty
 
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Pay runs</h2>
-        <button onClick={openRunForm} disabled={employees.length === 0} className="text-xs text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
+        <button onClick={openRunForm} disabled={employees.length === 0} className="text-xs text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50 disabled:no-underline">
           + New pay run
         </button>
       </div>
+      {employees.length === 0 && (
+        <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">
+          Add at least one employee on the Employees tab before you can create a pay run.
+        </p>
+      )}
 
       {showRunForm && (
         <form onSubmit={handleCreateRun} className="mb-4 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 max-w-2xl space-y-3">
@@ -1175,6 +1382,8 @@ function ReportsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<ty
   const [endDate, setEndDate] = useState('')
   const [report, setReport] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [webhookEvents, setWebhookEvents] = useState<any[]>([])
+  const [retrying, setRetrying] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -1190,7 +1399,28 @@ function ReportsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<ty
       setLoading(false)
     }
   }
-  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [orgId])
+  async function loadWebhookEvents() {
+    try {
+      setWebhookEvents(await api.get(`/api/payroll/webhook-events?organizationId=${orgId}`))
+    } catch {
+      // Non-fatal: the panel simply stays empty if this call fails.
+    }
+  }
+  useEffect(() => { load(); loadWebhookEvents() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [orgId])
+
+  async function retryEvent(id: string) {
+    setRetrying(id)
+    onError(null)
+    try {
+      await api.post(`/api/payroll/webhook-events/${id}/retry`)
+      await loadWebhookEvents()
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setRetrying(null)
+    }
+  }
+
 
   return (
     <div>
@@ -1242,6 +1472,52 @@ function ReportsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<ty
           </>
         )}
       </Card>
+
+      <Card title="Provider webhook events">
+        {webhookEvents.length === 0 ? (
+          <p className="text-sm text-gray-500">No provider webhook events received yet.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+              <tr><th className="py-1">Received</th><th className="py-1">Event type</th><th className="py-1">Status</th><th className="py-1">Retry</th></tr>
+            </thead>
+            <tbody>
+              {webhookEvents.map((e) => (
+                <tr key={e.id} className="border-t border-gray-100 dark:border-midnight-800">
+                  <td className="py-1 text-gray-900 dark:text-gray-100">{new Date(e.createdAt).toLocaleString()}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{e.eventType}</td>
+                  <td className="py-1">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        e.status === 'processed'
+                          ? 'bg-green-100 text-green-700'
+                          : e.status === 'error'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-amber-100 text-amber-700'
+                      }`}
+                      title={e.error || undefined}
+                    >
+                      {e.status}
+                    </span>
+                  </td>
+                  <td className="py-1">
+                    {(e.status === 'error' || e.status === 'unmatched') && (
+                      <button onClick={() => retryEvent(e.id)} disabled={retrying === e.id} className={btnSecondary}>
+                        {retrying === e.id ? 'Retrying…' : 'Retry'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="text-xs text-gray-400 mt-3">
+          Note: the connected provider automatically retries webhook delivery on failure (this endpoint returns a
+          non-2xx response so the provider's own retry/backoff kicks in). Processing is idempotent, so both
+          provider-side and manual retries here are always safe to repeat.
+        </p>
+      </Card>
     </div>
   )
 }
@@ -1251,6 +1527,12 @@ function PayrollContent() {
   const api = useApi(token)
   const [tab, setTab] = useState<Tab>('Setup')
   const [error, setError] = useState<string | null>(null)
+  const [providerConnected, setProviderConnected] = useState(false)
+
+  useEffect(() => {
+    api.get('/api/integrations/payroll-status').then((s) => setProviderConnected(Boolean(s.connected))).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!currentOrg) return null
 
@@ -1290,8 +1572,8 @@ function PayrollContent() {
       </div>
 
       {tab === 'Setup' && <SetupTab orgId={currentOrg.id} api={api} onError={setError} />}
-      {tab === 'Employees' && <EmployeesTab orgId={currentOrg.id} api={api} onError={setError} />}
-      {tab === 'Contractors' && <ContractorsTab orgId={currentOrg.id} api={api} onError={setError} />}
+      {tab === 'Employees' && <EmployeesTab orgId={currentOrg.id} api={api} onError={setError} providerConnected={providerConnected} />}
+      {tab === 'Contractors' && <ContractorsTab orgId={currentOrg.id} api={api} onError={setError} providerConnected={providerConnected} />}
       {tab === 'Pay runs' && <PayRunsTab orgId={currentOrg.id} api={api} onError={setError} />}
       {tab === 'Tax center' && <TaxCenterTab orgId={currentOrg.id} api={api} onError={setError} />}
       {tab === 'Reports' && <ReportsTab orgId={currentOrg.id} api={api} onError={setError} />}
@@ -1301,7 +1583,7 @@ function PayrollContent() {
 
 export default function PayrollPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireAddOnGroup="payroll">
       <PayrollContent />
     </ProtectedRoute>
   )

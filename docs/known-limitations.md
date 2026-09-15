@@ -47,7 +47,24 @@ explicit scope boundaries so no feature is misrepresented.
   is not finalized** — this requires actually contracting a licensed
   payroll provider, which is a business/legal step outside what code
   changes alone can complete. Marketing copy is worded accordingly (see
-  `src/lib/marketing-content.ts`).
+  `src/lib/marketing-content.ts`). A real (HTTP-calling) adapter for one
+  such provider, Check, exists in code
+  (`src/lib/integrations/payroll-check.ts`) but has **not** been verified
+  against Check's actual API or run against Check's sandbox — do not set
+  `PAYROLL_PROVIDER_MODE=check` until that verification and the required
+  partner agreement are both in place.
+- Access to the Payroll pages (`/payroll`, `/payroll/my`) requires the
+  organization to have a `payroll` add-on group entitlement
+  (`src/lib/entitlements.ts`); this is enforced both in the API (`enforceAddOnGroup`)
+  and in the UI (`ProtectedRoute`'s `requireAddOnGroup` prop), so
+  navigating directly to `/payroll` without the entitlement shows an
+  upsell screen instead of the payroll UI.
+- `tests/payroll-full-sandbox.test.ts` is an automated integration test,
+  using only fictional data and the sandbox provider, proving one
+  employee and one contractor can be onboarded, paid (payroll run /
+  vendor bill payment respectively), and posted to the general ledger
+  with balanced journal entries — with no real money movement or tax
+  filings.
 
 ## Tax
 - The Tax Summary report is informational — it shows tax collected on

@@ -26,16 +26,17 @@ const INTEGRATIONS = [
 const PAYROLL_DESCRIPTION = 'Calculate tax withholding, file payroll tax returns, and pay employees/contractors via direct deposit.'
 const PAYROLL_DETAIL_NOT_CONNECTED = 'Requires a licensed payroll provider (e.g. Check, Gusto Embedded) to be contracted and connected, with API credentials set as server environment variables (PAYROLL_PROVIDER_MODE and provider secrets) by a deployment administrator. API secrets cannot be entered through this page. Until a provider is connected, use the manual "Enter provider totals" fallback on the Payroll page.'
 const PAYROLL_DETAIL_SANDBOX = 'Connected to a sandbox (test-mode) payroll provider. The full onboarding, calculation, approval, direct-deposit and tax-filing lifecycle is exercised end to end, but no real payments or tax filings occur. Go to the Payroll page to onboard your company, employees and contractors.'
+const PAYROLL_DETAIL_CHECK = 'Connected to Check, a licensed embedded-payroll provider. Onboarding, calculation, approval, direct deposit and tax filing now run against a real provider account. Go to the Payroll page to onboard your company, employees and contractors.'
 
 function IntegrationsContent() {
   const { currentOrg, token } = useAuth()
-  const [payrollMode, setPayrollMode] = React.useState<'sandbox' | 'none'>('none')
+  const [payrollMode, setPayrollMode] = React.useState<'sandbox' | 'check' | 'none'>('none')
 
   React.useEffect(() => {
     if (!token) return
     fetch('/api/integrations/payroll-status', { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
-      .then((json) => { if (json?.mode === 'sandbox') setPayrollMode('sandbox') })
+      .then((json) => { if (json?.mode === 'sandbox' || json?.mode === 'check') setPayrollMode(json.mode) })
       .catch(() => {})
   }, [token])
 
@@ -44,8 +45,8 @@ function IntegrationsContent() {
     {
       name: 'Full-service payroll',
       description: PAYROLL_DESCRIPTION,
-      status: payrollMode === 'sandbox' ? 'Sandbox (test mode)' : 'Not connected',
-      detail: payrollMode === 'sandbox' ? PAYROLL_DETAIL_SANDBOX : PAYROLL_DETAIL_NOT_CONNECTED,
+      status: payrollMode === 'sandbox' ? 'Sandbox (test mode)' : payrollMode === 'check' ? 'Connected (Check)' : 'Not connected',
+      detail: payrollMode === 'sandbox' ? PAYROLL_DETAIL_SANDBOX : payrollMode === 'check' ? PAYROLL_DETAIL_CHECK : PAYROLL_DETAIL_NOT_CONNECTED,
     },
   ]
 

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { enforceFeature } from '../../../lib/entitlements'
-import { createContractor } from '../../../lib/contractors'
+import { createContractor, is1099Eligible } from '../../../lib/contractors'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -13,11 +13,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!organizationId) return res.status(400).json({ error: 'organizationId is required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
     const contractors = await prisma.contractor.findMany({ where: { organizationId }, include: { vendor: true }, orderBy: { name: 'asc' } })
-    return res.status(200).json(contractors)
+    return res.status(200).json(
+      contractors.map(({ taxIdEncrypted, ...c }) => ({ ...c, is1099Eligible: is1099Eligible(c) }))
+    )
   }
 
   if (req.method === 'POST') {
-    const { organizationId, name, email, taxIdLast4, vendorId } = req.body || {}
+    const { organizationId, name, email, taxIdLast4, vendorId, businessName, taxClassification, taxId, paymentMethod } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
     if (!(await enforceFeature(res, prisma, organizationId, 'expenses.contractor-tracking'))) return
@@ -27,7 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(400).json({ error: 'Vendor does not belong to this organization' })
       }
     }
-    const contractor = await prisma.$transaction((tx) => createContractor(tx, { organizationId, name, email, taxIdLast4, vendorId }))
+    const contractor = await prisma.$transaction((tx) =>
+      createContractor(tx, { organizationId, name, email, taxIdLast4, vendorId, businessName, taxClassification, taxId, paymentMethod })
+    )
     return res.status(201).json(contractor)
   }
 

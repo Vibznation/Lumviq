@@ -44,6 +44,7 @@ import type {
   PayrollTaxDocumentResult,
   PayrollWebhookEvent,
 } from './payroll'
+import { CheckPayrollProvider } from './payroll-check'
 import { last4 } from '../encryption'
 
 // Simplified, non-authoritative flat-rate sandbox estimates. Real
@@ -354,16 +355,29 @@ export class SandboxPayrollProvider implements PayrollProvider {
 }
 
 let sandboxInstance: SandboxPayrollProvider | undefined
+let checkInstance: CheckPayrollProvider | undefined
 
 /**
  * Returns the active PayrollProvider, or undefined if none is connected.
  * Mirrors the "not connected until an adapter is registered" convention
- * used by bank-feed/payments/ocr. Only returns the sandbox implementation
- * when explicitly opted into via PAYROLL_PROVIDER_MODE=sandbox — never
- * enabled implicitly in production.
+ * used by bank-feed/payments/ocr.
+ *
+ * - `PAYROLL_PROVIDER_MODE=check` selects the real Check adapter
+ *   (payroll-check.ts) — but only if `CHECK_API_KEY` is also set;
+ *   otherwise this returns undefined (never falls back to sandbox
+ *   silently, so a misconfigured production deploy fails closed rather
+ *   than pretending to be connected).
+ * - `PAYROLL_PROVIDER_MODE=sandbox` selects the in-memory test-mode
+ *   provider — never enabled implicitly in production.
+ * - Anything else (unset, in production) returns undefined.
  */
 export function getPayrollProvider(): PayrollProvider | undefined {
-  if (process.env.PAYROLL_PROVIDER_MODE === 'sandbox') {
+  const mode = process.env.PAYROLL_PROVIDER_MODE
+  if (mode === 'check') {
+    if (!checkInstance) checkInstance = new CheckPayrollProvider()
+    return checkInstance.isConfigured() ? checkInstance : undefined
+  }
+  if (mode === 'sandbox') {
     if (!sandboxInstance) sandboxInstance = new SandboxPayrollProvider()
     return sandboxInstance
   }

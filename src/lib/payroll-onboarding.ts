@@ -14,7 +14,7 @@
 import { getPayrollProvider } from './integrations/payroll-sandbox'
 import type { PayrollProvider } from './integrations/payroll'
 import { PayrollProviderNotConnectedError } from './payroll-run'
-import { encryptField, last4 } from './encryption'
+import { encryptField, decryptField, last4 } from './encryption'
 
 function requireProvider(): PayrollProvider {
   const provider = getPayrollProvider()
@@ -206,15 +206,30 @@ export async function onboardEmployeeWithProvider(tx: any, organizationId: strin
   const provider = requireProvider()
 
   const [firstName, ...rest] = employee.name.split(' ')
+  const hasAddress = Boolean(employee.addressLine1 && employee.city && employee.state && employee.postalCode)
   const result = employee.providerEmployeeId
     ? await provider.updateEmployee(employee.providerEmployeeId, {})
     : await provider.createEmployee({
         companyExternalId: profile.providerCompanyId,
+        workplaceExternalId: employee.locationId
+          ? (await tx.location.findUnique({ where: { id: employee.locationId } }))?.providerWorkplaceId ?? undefined
+          : undefined,
         firstName: firstName || employee.name,
         lastName: rest.join(' ') || '-',
         email: employee.email ?? undefined,
         payType: employee.payType === 'hourly' ? 'hourly' : 'salary',
         rate: employee.rate.toString(),
+        ssn: employee.ssnEncrypted ? decryptField(employee.ssnEncrypted) : undefined,
+        dateOfBirth: employee.dateOfBirth ? employee.dateOfBirth.toISOString().slice(0, 10) : undefined,
+        address: hasAddress
+          ? {
+              line1: employee.addressLine1!,
+              line2: employee.addressLine2 ?? undefined,
+              city: employee.city!,
+              state: employee.state!,
+              postalCode: employee.postalCode!,
+            }
+          : undefined,
       })
 
   return tx.employee.update({
@@ -360,6 +375,7 @@ export async function onboardContractorWithProvider(tx: any, organizationId: str
     businessName: contractor.businessName ?? undefined,
     email: contractor.email ?? undefined,
     taxClassification: contractor.taxClassification ?? undefined,
+    taxId: contractor.taxIdEncrypted ? decryptField(contractor.taxIdEncrypted) : undefined,
   })
 
   return tx.contractor.update({

@@ -67,12 +67,32 @@ export interface PayrollProvider {
   approve → submit → sync-to-paid/completed, plus cancel/void) can be
   built and exercised end-to-end before a real licensed provider (Check,
   Gusto Embedded, or similar) is contracted.
-- `getPayrollProvider()` only returns the sandbox instance when
-  `PAYROLL_PROVIDER_MODE=sandbox` is explicitly set; every other
-  environment (including production by default) correctly reports "no
-  payroll provider connected" and every provider-dependent action
-  (`calculatePayRun`, `submitApprovedPayRun`, `syncPayRunStatus`,
-  `cancelPayRun`, `voidPayRun`) throws `PayrollProviderNotConnectedError`.
+- A second, real (HTTP-calling) adapter also exists:
+  `src/lib/integrations/payroll-check.ts`'s `CheckPayrollProvider`,
+  implementing the full `PayrollProvider` interface against Check's
+  (checkhq.com) REST API conventions — bearer-token auth, retry-with-backoff
+  on 5xx, and HMAC-SHA256 webhook signature verification. It is **not**
+  proven against Check's real sandbox/production API — endpoint paths and
+  payloads must be verified against Check's current docs, and a signed
+  partner agreement plus a passing run of the full sandbox test
+  (`tests/payroll-full-sandbox.test.ts`) against Check's own sandbox is
+  required before setting `PAYROLL_PROVIDER_MODE=check` in production.
+- `getPayrollProvider()` (`src/lib/integrations/payroll-sandbox.ts`) is the
+  single factory both adapters are selected from, based on
+  `PAYROLL_PROVIDER_MODE`:
+  - `sandbox` → `SandboxPayrollProvider` (test-mode, in-memory).
+  - `check` → `CheckPayrollProvider`, but only if `CHECK_API_KEY` is set
+    (`isConfigured()` check) — otherwise the factory fails closed and
+    returns nothing, same as the unset case below.
+  - anything else (including unset, the production default) → no
+    provider; every provider-dependent action correctly reports "no
+    payroll provider connected" and throws `PayrollProviderNotConnectedError`
+    (`calculatePayRun`, `submitApprovedPayRun`, `syncPayRunStatus`,
+    `cancelPayRun`, `voidPayRun`, `onboardEmployeeWithProvider`, etc.).
+  - `GET /api/integrations/payroll-status` and the Settings → Integrations
+    page reflect this same tri-state (`none` | `sandbox` | `check`) so the
+    Payroll page can show actionable "connect a provider" messaging on
+    onboarding buttons instead of failing silently.
 - Manual-entry payroll (enter a licensed provider's totals by hand, then
   `POST /api/pay-runs` → `POST /api/pay-runs/[id]/post`) still works
   exactly as before and does not require a connected provider —
@@ -84,6 +104,22 @@ export interface PayrollProvider {
   `[provider, externalEventId]`), then calls `syncPayRunStatus` — which
   is also the only place a pay run gets posted to the ledger under the
   provider workflow, and only once the provider reports `paid`/`completed`.
+  The provider's own delivery retries (triggered by this endpoint
+  returning non-2xx on failure) are the primary retry mechanism; a
+  secondary manual safety net also exists — `GET /api/payroll/webhook-events`
+  (lists recent events for an org) and `POST
+  /api/payroll/webhook-events/[id]/retry` (re-runs `syncPayRunStatus` for
+  one event's pay run) — both surfaced in the Payroll page's Reports tab.
+- Employee/contractor onboarding covers the full profile required for a
+  real provider, not just name/rate: `PATCH /api/employees/[id]` accepts
+  legal identity, residential address, DOB, encrypted SSN, employment
+  status/hire date, department/job title, pay schedule and location;
+  `POST /api/employees/[id]/deductions` and
+  `POST /api/employees/[id]/garnishments` add benefit/garnishment lines;
+  `POST /api/contractors` accepts full W-9 fields (business name, tax
+  classification, encrypted tax id, payment method), and
+  `src/lib/contractors.ts`'s `is1099Eligible()` flags contractors likely
+  to need a 1099 (display-only simplification, not tax advice).
 - SSNs and bank routing/account numbers are encrypted at rest via
   `src/lib/encryption.ts` (AES-256-GCM, `FIELD_ENCRYPTION_KEY` required in
   production) — the first field-level PII encryption in this codebase.
@@ -103,11 +139,17 @@ export interface PayrollProvider {
   `SandboxPayrollProvider` for local development/testing only. Must be
   **unset** in production; a deployment admin sets this, it is never
   enterable through the UI (see `src/pages/settings/integrations.tsx`).
+- `PAYROLL_PROVIDER_MODE=check` plus `CHECK_API_KEY` (and optionally
+  `CHECK_API_BASE_URL`, `CHECK_WEBHOOK_SECRET`) — enables the real
+  `CheckPayrollProvider`. Only set this once the prerequisites below are
+  met; the factory fails closed (no provider) if `CHECK_API_KEY` is missing.
 - `PAYROLL_WEBHOOK_SECRET` — HMAC-SHA256 secret used by
   `SandboxPayrollProvider.handleWebhook()` to verify the
   `x-payroll-signature` header on inbound `POST /api/webhooks/payroll`
-  requests. A real provider integration must verify signatures using
-  that provider's documented scheme/secret instead.
+  requests. `CheckPayrollProvider.handleWebhook()` uses
+  `CHECK_WEBHOOK_SECRET` instead, with the same HMAC-SHA256 +
+  constant-time-compare scheme — verify against Check's actual documented
+  header name/scheme before relying on it in production.
 - `FIELD_ENCRYPTION_KEY` — required for `src/lib/encryption.ts` (AES-256-GCM),
   which encrypts SSNs and bank routing/account numbers at rest. Required
   in any environment that stores real employee/contractor payroll data.

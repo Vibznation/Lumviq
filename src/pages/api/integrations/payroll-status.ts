@@ -14,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   const connected = isProviderConnected()
-  const mode = process.env.PAYROLL_PROVIDER_MODE === 'sandbox' ? 'sandbox' : 'none'
+  const rawMode = process.env.PAYROLL_PROVIDER_MODE
+  const mode = rawMode === 'sandbox' ? 'sandbox' : rawMode === 'check' && connected ? 'check' : 'none'
   return res.status(200).json({ connected, mode })
 }

@@ -159,7 +159,7 @@ function MyPayrollContent() {
 
 export default function MyPayrollPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireAddOnGroup="payroll">
       <MyPayrollContent />
     </ProtectedRoute>
   )
