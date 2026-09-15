@@ -1,6 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
+import { getOrgEntitlements, hasFeature } from '../../../lib/entitlements'
+import { computeCashShortageForecast, computeLinearForecast, computeZScoreOutliers } from '../../../lib/intelligence'
+
+/**
+ * Maps each insight's `type` to the plans.ts feature key that gates it
+ * (all currently ENTERPRISE-only, see FEATURE_CATALOG's 'intelligence'
+ * group). Insight types with no entry here (currently only
+ * `overdue_receivables`, which mirrors the base AR-aging report data)
+ * are always included regardless of plan.
+ */
+const INSIGHT_FEATURE_KEYS: Record<string, string> = {
+  cash_forecast: 'intelligence.cash-flow-insights',
+  unusual_transactions: 'intelligence.anomaly-detection',
+  category_suggestions: 'intelligence.transaction-suggestions',
+  profit_forecast: 'intelligence.forecast-explanations',
+  payment_recommendations: 'intelligence.payment-recommendations',
+  reconciliation_suggestions: 'intelligence.reconciliation-suggestions',
+  management_summary: 'intelligence.management-summaries',
+}
 
 /**
  * Rule-based, deterministic insights computed directly from the
@@ -39,8 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
   })
   const netCashFlow90d = recentBankLines.reduce((s, l) => s + (l.isDebit ? Number(l.amount) : -Number(l.amount)), 0)
-  const dailyBurn = netCashFlow90d / 90
-  const daysToShortage = dailyBurn < 0 && currentCash > 0 ? Math.floor(currentCash / -dailyBurn) : null
+  const { dailyBurn, daysToShortage } = computeCashShortageForecast(currentCash, netCashFlow90d, 90)
 
   insights.push({
     type: 'cash_forecast',
@@ -101,9 +119,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     total: e.lines.filter((l) => l.isDebit).reduce((s, l) => s + Number(l.amount), 0),
   }))
   const mean = entryTotals.length > 0 ? entryTotals.reduce((s, e) => s + e.total, 0) / entryTotals.length : 0
-  const variance = entryTotals.length > 0 ? entryTotals.reduce((s, e) => s + (e.total - mean) ** 2, 0) / entryTotals.length : 0
-  const stdDev = Math.sqrt(variance)
-  const outliers = stdDev > 0 ? entryTotals.filter((e) => Math.abs(e.total - mean) > 2 * stdDev) : []
+  const { stdDev, outliers } = computeZScoreOutliers(entryTotals, 2)
   insights.push({
     type: 'unusual_transactions',
     label: 'Unusual transactions',
@@ -168,8 +184,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (line.account.type === 'income') recentRevenue += line.isDebit ? -amount : amount
     else recentExpense += line.isDebit ? amount : -amount
   }
-  const dailyNetIncome = (recentRevenue - recentExpense) / 90
-  const projectedNext30Days = dailyNetIncome * 30
+  const { dailyRate: dailyNetIncome, projected: projectedNext30Days } = computeLinearForecast(recentRevenue - recentExpense, 90, 30)
   insights.push({
     type: 'profit_forecast',
     label: 'Profit forecast',
@@ -265,17 +280,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Log every computation for audit purposes (see prompt.md's AI
   // INTELLIGENCE requirement to log suggestions/insights). This is a log
   // of a deterministic calculation, not a model interaction.
+  const entitlements = await getOrgEntitlements(prisma, organizationId)
+  const visibleInsights = insights.filter((i) => {
+    const featureKey = INSIGHT_FEATURE_KEYS[i.type]
+    return !featureKey || hasFeature(entitlements, featureKey)
+  })
+
   await prisma.aiInteraction.create({
     data: {
       organizationId,
       userId: user.id,
       kind: 'intelligence.insights',
-      basis: insights.map((i) => i.type).join(','),
+      basis: visibleInsights.map((i) => i.type).join(','),
       inputSummary: { organizationId },
-      outputSummary: { insightCount: insights.length, types: insights.map((i) => i.type) },
+      outputSummary: { insightCount: visibleInsights.length, types: visibleInsights.map((i) => i.type) },
     },
   })
 
-  return res.status(200).json({ insights, generatedAt: new Date().toISOString() })
+  return res.status(200).json({ insights: visibleInsights, generatedAt: new Date().toISOString() })
 }
 

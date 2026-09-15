@@ -1,6 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
+import { enforceFeature } from '../../../lib/entitlements'
+
+const MAX_QUESTION_LENGTH = 500
 
 /**
  * "AI chat" — NOT a real LLM integration. This is a small deterministic
@@ -65,9 +68,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { organizationId, question } = req.body || {}
   if (!organizationId || !question) return res.status(400).json({ error: 'organizationId and question are required' })
+  if (typeof question !== 'string' || question.trim().length === 0) {
+    return res.status(400).json({ error: 'question must be a non-empty string' })
+  }
+  if (question.length > MAX_QUESTION_LENGTH) {
+    return res.status(400).json({ error: `question must be ${MAX_QUESTION_LENGTH} characters or fewer` })
+  }
   if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+  if (!(await enforceFeature(res, prisma, organizationId, 'intelligence.ai-chat'))) return
 
-  const result = await answer(organizationId, String(question))
+  const result = await answer(organizationId, question.trim())
 
   await prisma.aiInteraction.create({
     data: {
