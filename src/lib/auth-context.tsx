@@ -49,7 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: { Authorization: `Bearer ${activeToken}` },
     })
     if (!res.ok) {
-      throw new Error('Session expired')
+      const j = await res.json().catch(() => ({}))
+      const msg = j.error || (res.status === 401 ? 'Session expired' : `Request failed (${res.status})`)
+      throw new Error(msg)
     }
     const json = await res.json()
     setUser(json.user)
@@ -82,38 +84,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [loadMe])
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      return { ok: false, error: j.error || 'Invalid credentials' }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        return { ok: false, error: j.error || 'Invalid credentials' }
+      }
+      const { token: newToken } = await res.json()
+      window.localStorage.setItem(TOKEN_KEY, newToken)
+      setToken(newToken)
+      try {
+        const json = await loadMe(newToken)
+        const orgs: OrgSummary[] = json.organizations || []
+        if (orgs.length > 0) {
+          setCurrentOrgIdState(orgs[0].id)
+          window.localStorage.setItem(ORG_KEY, orgs[0].id)
+        }
+      } catch (loadErr: any) {
+        window.localStorage.removeItem(TOKEN_KEY)
+        setToken(null)
+        return { ok: false, error: loadErr?.message || 'Could not load profile' }
+      }
+      return { ok: true }
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Login failed' }
     }
-    const { token: newToken } = await res.json()
-    window.localStorage.setItem(TOKEN_KEY, newToken)
-    setToken(newToken)
-    const json = await loadMe(newToken)
-    const orgs: OrgSummary[] = json.organizations || []
-    if (orgs.length > 0) {
-      setCurrentOrgIdState(orgs[0].id)
-      window.localStorage.setItem(ORG_KEY, orgs[0].id)
-    }
-    return { ok: true }
   }, [loadMe])
 
   const register = useCallback(async (email: string, password: string, name?: string) => {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, name }),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}))
-      return { ok: false, error: j.error || 'Could not register' }
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        return { ok: false, error: j.error || 'Could not register' }
+      }
+      return login(email, password)
+    } catch (err: any) {
+      return { ok: false, error: err?.message || 'Registration failed' }
     }
-    return login(email, password)
   }, [login])
 
   const logout = useCallback(() => {
@@ -127,7 +143,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (!token) return
-    await loadMe(token)
+    try {
+      await loadMe(token)
+    } catch {
+      // ignore
+    }
   }, [token, loadMe])
 
   const setCurrentOrgId = useCallback((organizationId: string) => {

@@ -10,24 +10,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const payload = verifyToken(token)
   if (!payload || !payload.userId) return res.status(401).json({ error: 'Invalid token' })
 
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } })
-  if (!user) return res.status(401).json({ error: 'Invalid token' })
+  try {
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } })
+    if (!user) return res.status(401).json({ error: 'Invalid token' })
 
-  const memberships = await prisma.organizationMembership.findMany({
-    where: { userId: user.id },
-    include: { organization: true },
-    orderBy: { createdAt: 'asc' },
-  })
+    const memberships = await prisma.organizationMembership.findMany({
+      where: { userId: user.id },
+      include: { organization: true },
+      orderBy: { createdAt: 'asc' },
+    })
 
-  return res.status(200).json({
-    user: { id: user.id, email: user.email, name: user.name },
-    organizations: memberships.map((m) => ({
-      id: m.organizationId,
-      name: m.organization.name,
-      role: m.role,
-      planId: m.organization.planId,
-      billingCycle: m.organization.billingCycle,
-      addOns: m.organization.addOns,
-    })),
-  })
+    return res.status(200).json({
+      user: { id: user.id, email: user.email, name: user.name },
+      organizations: memberships.map((m) => ({
+        id: m.organizationId,
+        name: m.organization.name,
+        role: m.role,
+        planId: m.organization.planId,
+        billingCycle: m.organization.billingCycle,
+        addOns: m.organization.addOns,
+      })),
+    })
+  } catch (err) {
+    console.error('Error in /api/auth/me:', err)
+    return res.status(500).json({ error: 'Failed to retrieve user profile' })
+  }
 }
