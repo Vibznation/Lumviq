@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { runRecurringTemplate } from '../../../../lib/recurring'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -16,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!template) return res.status(404).json({ error: 'Recurring template not found' })
   if (!(await userHasMembership(user.id, template.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (!template.active) return res.status(400).json({ error: 'This template is inactive' })
+  if (!(await enforceFeature(res, prisma, template.organizationId, template.type === 'invoice' ? 'sales.recurring-invoices' : 'expenses.recurring-bills'))) return
 
   const created = await prisma.$transaction((tx) => runRecurringTemplate(tx, template, user.id))
   return res.status(200).json(created)

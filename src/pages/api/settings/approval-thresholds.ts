@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership, userHasPermission } from '../../../lib/authorization'
+import { enforceFeature } from '../../../lib/entitlements'
 
 /**
  * Configurable per-resource-type approval dollar thresholds, stored as a
@@ -30,6 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!(await userHasPermission(user.id, organizationId, 'manage_organization'))) {
       return res.status(403).json({ error: 'Only an owner or admin can change approval thresholds' })
     }
+    if (!(await enforceFeature(res, prisma, organizationId, 'team.approval-limits'))) return
     const org = await prisma.organization.update({ where: { id: organizationId }, data: { approvalThresholds: thresholds } })
     return res.status(200).json(org.approvalThresholds)
   }

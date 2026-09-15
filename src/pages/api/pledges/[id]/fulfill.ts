@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { fulfillPledge } from '../../../../lib/nonprofit'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -18,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const pledge = await prisma.pledge.findUnique({ where: { id } })
   if (!pledge) return res.status(404).json({ error: 'Pledge not found' })
   if (!(await userHasMembership(user.id, pledge.organizationId))) return res.status(403).json({ error: 'Forbidden' })
+  if (!(await enforceFeature(res, prisma, pledge.organizationId, 'nonprofit.pledges'))) return
 
   try {
     const updated = await prisma.$transaction((tx) => fulfillPledge(tx, pledge, amount))

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { recordAdjustmentStockMovement } from '../../../../lib/inventory'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 /** Manual stock adjustment (stocktake correction, shrinkage, damage). */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -17,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!product) return res.status(404).json({ error: 'Product not found' })
   if (!(await userHasMembership(user.id, product.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (product.type !== 'inventory') return res.status(400).json({ error: 'Only inventory-tracked products support stock adjustments' })
+  if (!(await enforceFeature(res, prisma, product.organizationId, 'inventory.inventory-quantities'))) return
 
   try {
     await prisma.$transaction((tx) => recordAdjustmentStockMovement(tx, product.organizationId, product.id, quantity, note))

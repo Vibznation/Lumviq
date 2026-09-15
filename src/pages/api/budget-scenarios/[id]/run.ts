@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { computeScenario, applyScenario } from '../../../../lib/budget-scenarios'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 /** Body: { action: 'compute' | 'apply', year: number } */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -16,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const scenario = await prisma.budgetScenario.findUnique({ where: { id } })
   if (!scenario) return res.status(404).json({ error: 'Budget scenario not found' })
   if (!(await userHasMembership(user.id, scenario.organizationId))) return res.status(403).json({ error: 'Forbidden' })
+  if (!(await enforceFeature(res, prisma, scenario.organizationId, 'planning.scenario-planning'))) return
 
   const { action, year } = req.body || {}
   if (!year) return res.status(400).json({ error: 'year is required' })

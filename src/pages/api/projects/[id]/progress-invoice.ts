@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { computeInvoiceTotals, nextInvoiceNumber } from '../../../../lib/invoicing'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 /**
  * Progress invoicing: bills a project's customer for its uninvoiced
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!project) return res.status(404).json({ error: 'Project not found' })
   if (!(await userHasMembership(user.id, project.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (!project.customerId) return res.status(400).json({ error: 'This project has no customer to invoice' })
+  if (!(await enforceFeature(res, prisma, project.organizationId, 'sales.progress-invoicing'))) return
 
   const account = await prisma.account.findUnique({ where: { id: accountId } })
   if (!account || account.organizationId !== project.organizationId) {

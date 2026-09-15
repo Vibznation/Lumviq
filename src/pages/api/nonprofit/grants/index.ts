@@ -35,6 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const grant = await prisma.grant.findUnique({ where: { id: grantId } })
     if (!grant) return res.status(404).json({ error: 'Grant not found' })
     if (!(await userHasMembership(user.id, grant.organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, grant.organizationId, 'nonprofit.grants'))) return
     try {
       const updated = await prisma.$transaction((tx) => recordGrantSpend(tx, grantId, spendAmount))
       return res.status(200).json(updated)

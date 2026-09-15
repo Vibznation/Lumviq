@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership, userHasPermission } from '../../../../lib/authorization'
 import { closeAccountingPeriod } from '../../../../lib/accounting-periods'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 /** Closes an accounting period once its close checklist is fully complete. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -21,6 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!(await userHasPermission(user.id, organizationId, 'accounting.close-period'))) {
     return res.status(403).json({ error: 'You do not have permission to close accounting periods' })
   }
+  if (!(await enforceFeature(res, prisma, organizationId, 'accounting.closing-periods'))) return
 
   try {
     const updated = await prisma.$transaction((tx) =>

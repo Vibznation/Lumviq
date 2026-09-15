@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { convertPurchaseOrderToBill } from '../../../../lib/purchase-orders'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -15,6 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const po = await prisma.purchaseOrder.findUnique({ where: { id }, include: { lines: true } })
   if (!po) return res.status(404).json({ error: 'Purchase order not found' })
   if (!(await userHasMembership(user.id, po.organizationId))) return res.status(403).json({ error: 'Forbidden' })
+  if (!(await enforceFeature(res, prisma, po.organizationId, 'expenses.bill-management'))) return
 
   const bill = await prisma.$transaction(async (tx) => {
     const count = await tx.bill.count({ where: { organizationId: po.organizationId } })

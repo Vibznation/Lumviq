@@ -3,6 +3,7 @@ import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { postPayRunToLedger } from '../../../../lib/payroll'
 import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
+import { enforceAddOnGroup } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -14,6 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!payRun) return res.status(404).json({ error: 'Pay run not found' })
   if (!(await userHasMembership(user.id, payRun.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (payRun.status !== 'draft') return res.status(400).json({ error: 'Only draft pay runs can be posted' })
+  if (!(await enforceAddOnGroup(res, prisma, payRun.organizationId, 'payroll'))) return
 
   try {
     const org = await prisma.organization.findUnique({ where: { id: payRun.organizationId } })
