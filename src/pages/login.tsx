@@ -20,7 +20,7 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
-    const result = await login(email, password)
+    const result = await login(email.trim(), password)
     setSubmitting(false)
     if (!result.ok) {
       setError(result.error || 'Could not sign in')

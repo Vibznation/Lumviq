@@ -9,12 +9,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(429).json({ error: 'Too many registration attempts, try again shortly' })
   }
   const { email, password, name } = req.body
-  if (!email || !password) return res.status(400).json({ error: 'email and password required' })
+  if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ error: 'email and password required' })
+  }
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) {
+    return res.status(400).json({ error: 'email and password required' })
+  }
   try {
-    const existing = await prisma.user.findUnique({ where: { email } })
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+    })
     if (existing) return res.status(409).json({ error: 'User exists' })
     const passwordHash = await bcrypt.hash(password, 10)
-    const user = await prisma.user.create({ data: { email, name, passwordHash } })
+    const user = await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: typeof name === 'string' ? name.trim() : name,
+        passwordHash,
+      },
+    })
     return res.status(201).json({ id: user.id, email: user.email })
   } catch (err: any) {
     // Unique constraint race (two concurrent requests for the same email)

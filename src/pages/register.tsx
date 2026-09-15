@@ -25,7 +25,7 @@ export default function RegisterPage() {
       return
     }
     setSubmitting(true)
-    const result = await register(email, password, name)
+    const result = await register(email.trim(), password, name.trim())
     setSubmitting(false)
     if (!result.ok) {
       setError(result.error || 'Could not create your account')
