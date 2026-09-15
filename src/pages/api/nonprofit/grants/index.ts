@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { createGrant, recordGrantSpend } from '../../../../lib/nonprofit'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -21,6 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'organizationId, name, grantorName, totalAwarded and startDate are required' })
     }
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'nonprofit.grants'))) return
     const grant = await prisma.$transaction((tx) =>
       createGrant(tx, { organizationId, fundId, name, grantorName, totalAwarded, startDate, endDate })
     )

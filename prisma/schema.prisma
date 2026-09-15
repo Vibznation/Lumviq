@@ -720,6 +720,8 @@ model SubscriptionEvent {
   planId         String   @map("plan_id")
   billingCycle   String   @map("billing_cycle")
   addOns         String[] @default([]) @map("add_ons")
+  /// 'upgraded' | 'downgraded' | 'plan_changed' (same tier rank, e.g. billing-cycle/add-on-only change). Nullable for rows created before this field existed.
+  eventType      String?  @map("event_type")
   actorId        String?  @map("actor_id") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at")
 

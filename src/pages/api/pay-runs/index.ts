@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { addMinor, fromMinorUnits, toMinorUnits } from '../../../lib/money'
+import { enforceAddOnGroup } from '../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -25,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'organizationId, payPeriodStart, payPeriodEnd and at least one line are required' })
     }
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceAddOnGroup(res, prisma, organizationId, 'payroll'))) return
 
     for (const l of lines) {
       const employee = await prisma.employee.findUnique({ where: { id: l.employeeId } })

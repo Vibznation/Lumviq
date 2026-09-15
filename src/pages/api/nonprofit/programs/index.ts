@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { createProgram } from '../../../../lib/nonprofit'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -19,6 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { organizationId, name, description } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'nonprofit.programs'))) return
     const program = await prisma.$transaction((tx) => createProgram(tx, { organizationId, name, description }))
     return res.status(201).json(program)
   }

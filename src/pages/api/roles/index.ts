@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
+import { enforceFeature } from '../../../lib/entitlements'
 
 /**
  * Custom roles, scoped per organization (Role.organizationId + a
@@ -29,6 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { organizationId, name, description, permissionIds } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'team.custom-roles'))) return
 
     const existing = await prisma.role.findUnique({ where: { organizationId_name: { organizationId, name } } })
     if (existing) return res.status(409).json({ error: 'A role with this name already exists in this organization.' })

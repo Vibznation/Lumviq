@@ -137,3 +137,31 @@ export async function enforceLimit(
     throw err
   }
 }
+
+/**
+ * Returns true if the org has purchased any add-on belonging to the given
+ * group (e.g. 'payroll'). Add-ons are modules layered on top of a plan
+ * rather than plan-tier features, so this is checked separately from
+ * hasFeature()/enforceFeature() — see ADD_ONS in plans.ts for the group
+ * each add-on id belongs to.
+ */
+export function hasAddOnGroup(entitlements: Entitlements, group: string): boolean {
+  return entitlements.addOns.some((id) => ADD_ONS.find((a) => a.id === id)?.group === group)
+}
+
+/**
+ * Server-side gate for add-on-only modules (currently: payroll). Same
+ * return-value contract as enforceFeature/enforceLimit: writes a 403
+ * `{error, upgradeMessage}` and returns false when the org has not
+ * purchased any add-on in the given group.
+ */
+export async function enforceAddOnGroup(res: any, tx: any, organizationId: string, group: string): Promise<boolean> {
+  const entitlements = await getOrgEntitlements(tx, organizationId)
+  if (hasAddOnGroup(entitlements, group)) return true
+  res.status(403).json({
+    error: `No active add-on for: ${group}`,
+    upgradeMessage: `This feature requires a ${group} add-on. Visit /pricing to add it to your plan.`,
+  })
+  return false
+}
+

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
+import { enforceAddOnGroup } from '../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const user = await requireUserFromRequest(req)
@@ -18,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { organizationId, name, email, payType, rate } = req.body || {}
     if (!organizationId || !name || rate == null) return res.status(400).json({ error: 'organizationId, name and rate are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceAddOnGroup(res, prisma, organizationId, 'payroll'))) return
     const employee = await prisma.employee.create({
       data: { organizationId, name, email: email || null, payType: payType || 'salary', rate },
     })

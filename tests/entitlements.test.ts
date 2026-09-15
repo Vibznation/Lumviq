@@ -3,11 +3,13 @@ import {
   resolveEntitlements,
   hasFeature,
   hasAddOn,
+  hasAddOnGroup,
   requireFeature,
   requireWithinLimit,
   EntitlementError,
   enforceFeature,
   enforceLimit,
+  enforceAddOnGroup,
 } from '../src/lib/entitlements'
 import { getPlan } from '../src/lib/plans'
 
@@ -146,5 +148,37 @@ describe('entitlements.ts enforceLimit (API route gate)', () => {
     const ok = await enforceLimit(res, tx, 'org-1', 'invoicesPerMonth', 999_999)
     expect(ok).toBe(true)
     expect(res.status).not.toHaveBeenCalled()
+  })
+})
+
+describe('entitlements.ts hasAddOnGroup / enforceAddOnGroup', () => {
+  it('hasAddOnGroup is true when the org has any add-on in that group', () => {
+    const entitlements = resolveEntitlements({ planId: 'grow', billingCycle: 'monthly', addOns: ['payroll-complete'] })
+    expect(hasAddOnGroup(entitlements, 'payroll')).toBe(true)
+    expect(hasAddOnGroup(entitlements, 'commerce')).toBe(false)
+  })
+
+  it('hasAddOnGroup ignores unknown/retired add-on ids', () => {
+    const entitlements = resolveEntitlements({ planId: 'grow', billingCycle: 'monthly', addOns: ['retired-addon'] })
+    expect(hasAddOnGroup(entitlements, 'payroll')).toBe(false)
+  })
+
+  it('enforceAddOnGroup returns true and does not touch res when the group is present', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'grow', billingCycle: 'monthly', addOns: ['payroll-start'] })
+    const ok = await enforceAddOnGroup(res, tx, 'org-1', 'payroll')
+    expect(ok).toBe(true)
+    expect(res.status).not.toHaveBeenCalled()
+  })
+
+  it('enforceAddOnGroup returns false and writes a 403 with an upgradeMessage when the group is absent', async () => {
+    const res = mockRes()
+    const tx = mockTx({ planId: 'grow', billingCycle: 'monthly', addOns: [] })
+    const ok = await enforceAddOnGroup(res, tx, 'org-1', 'payroll')
+    expect(ok).toBe(false)
+    expect(res.status).toHaveBeenCalledWith(403)
+    const body = res.json.mock.calls[0][0]
+    expect(body.error).toContain('payroll')
+    expect(body.upgradeMessage).toContain('payroll')
   })
 })

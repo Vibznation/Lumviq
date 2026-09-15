@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { requireUserFromRequest, userHasMembership } from '../../../lib/authorization'
 import { createDimension, listDimensionsWithValues } from '../../../lib/dimensions'
+import { enforceFeature } from '../../../lib/entitlements'
 import prisma from '../../../server/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,6 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { organizationId, name } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
+    if (!(await enforceFeature(res, prisma, organizationId, 'team.dimension-tracking'))) return
     try {
       const dimension = await prisma.$transaction((tx) => createDimension(tx, organizationId, name))
       return res.status(201).json(dimension)
