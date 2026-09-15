@@ -5,7 +5,8 @@ import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Vendor = { id: string; name: string }
 type Account = { id: string; code: string; name: string; type: string }
-type VendorCredit = { id: string; creditNumber: string; amount: string; remainingAmount: string; vendor: { name: string } }
+type Bill = { id: string; billNumber: string; total: string; amountPaid: string; vendorId: string }
+type VendorCredit = { id: string; creditNumber: string; amount: string; remainingAmount: string; reason: string | null; vendor: { id: string; name: string } }
 
 function currency(n: string | number) {
   return Number(n).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
@@ -16,26 +17,30 @@ function VendorCreditsContent() {
   const [credits, setCredits] = useState<VendorCredit[]>([])
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [bills, setBills] = useState<Bill[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ vendorId: '', amount: '', reason: '', expenseAccountId: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [applyState, setApplyState] = useState<Record<string, { billId: string; amount: string }>>({})
 
   async function load() {
     if (!currentOrg) return
     setLoading(true)
     setError(null)
     try {
-      const [cRes, vRes, aRes] = await Promise.all([
+      const [cRes, vRes, aRes, bRes] = await Promise.all([
         fetch(`/api/vendor-credits?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
         fetch(`/api/vendors?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
         fetch(`/api/accounts?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
+        fetch(`/api/bills?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
       ])
       if (!cRes.ok) throw new Error('Could not load vendor credits')
       setCredits(await cRes.json())
       setVendors(vRes.ok ? await vRes.json() : [])
       setAccounts(aRes.ok ? (await aRes.json()).filter((a: Account) => a.type === 'expense') : [])
+      setBills(bRes.ok ? (await bRes.json()).map((b: any) => ({ id: b.id, billNumber: b.billNumber, total: b.total, amountPaid: b.amountPaid, vendorId: b.vendor?.id || b.vendorId })) : [])
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -70,6 +75,27 @@ function VendorCreditsContent() {
       setError(err.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleApply(creditId: string) {
+    const state = applyState[creditId]
+    if (!state?.billId || !state?.amount) return setError('Select a bill and amount to apply')
+    setError(null)
+    try {
+      const res = await fetch(`/api/vendor-credits/${creditId}/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ billId: state.billId, amount: state.amount }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Could not apply vendor credit')
+      }
+      setApplyState((s) => ({ ...s, [creditId]: { billId: '', amount: '' } }))
+      await load()
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -125,27 +151,49 @@ function VendorCreditsContent() {
       ) : credits.length === 0 ? (
         <p className="text-sm text-gray-500">No vendor credits yet.</p>
       ) : (
-        <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
-              <tr>
-                <th className="px-4 py-2">Number</th>
-                <th className="px-4 py-2">Vendor</th>
-                <th className="px-4 py-2 text-right">Original</th>
-                <th className="px-4 py-2 text-right">Remaining</th>
-              </tr>
-            </thead>
-            <tbody>
-              {credits.map((c) => (
-                <tr key={c.id} className="border-t border-gray-100 dark:border-midnight-800">
-                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{c.creditNumber}</td>
-                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{c.vendor?.name}</td>
-                  <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">{currency(c.amount)}</td>
-                  <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">{currency(c.remainingAmount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {credits.map((c) => {
+            const vendorBills = bills.filter((b) => b.vendorId === c.vendor.id && Number(b.total) - Number(b.amountPaid) > 0)
+            const state = applyState[c.id] || { billId: '', amount: '' }
+            return (
+              <div key={c.id} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{c.creditNumber} — {c.vendor.name}</span>
+                  <span className="text-gray-500 dark:text-gray-400">{currency(c.remainingAmount)} remaining of {currency(c.amount)}</span>
+                </div>
+                {c.reason && <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">{c.reason}</p>}
+                {Number(c.remainingAmount) > 0 && vendorBills.length > 0 && (
+                  <div className="flex items-end gap-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Apply to bill</label>
+                      <select
+                        value={state.billId}
+                        onChange={(e) => setApplyState((s) => ({ ...s, [c.id]: { ...state, billId: e.target.value } }))}
+                        className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+                      >
+                        <option value="">Select…</option>
+                        {vendorBills.map((b) => <option key={b.id} value={b.id}>{b.billNumber}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Amount</label>
+                      <input
+                        value={state.amount}
+                        onChange={(e) => setApplyState((s) => ({ ...s, [c.id]: { ...state, amount: e.target.value } }))}
+                        className="mt-1 w-28 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleApply(c.id)}
+                      className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

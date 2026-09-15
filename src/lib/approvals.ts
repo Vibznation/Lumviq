@@ -1,5 +1,5 @@
 import { createNotification } from './notifications'
-import { createAndPostBillPayment } from './purchasing'
+import { createAndPostBillPayment, postBillToLedger } from './purchasing'
 import { postJournalEntryTx, type JournalEntry } from './ledger'
 import { postReimbursementToLedger } from './reimbursements'
 import { postPayRunToLedger } from './payroll'
@@ -10,10 +10,11 @@ import { postPayRunToLedger } from './payroll'
  * payments, purchase orders, journal entries, payroll runs, budgets,
  * vendor/banking changes).
  *
- * Wired end-to-end as of this pass: bill payments, reimbursement payouts,
- * purchase order issuance (draft -> sent), manual journal entries, and
- * payroll run posting. For each, when the amount is at or above its
- * threshold, the money-moving action is NOT executed immediately — an
+ * Wired end-to-end as of this pass: bill posting (draft -> open), bill
+ * payments, reimbursement payouts, purchase order issuance (draft ->
+ * sent), manual journal entries, and payroll run posting. For each, when
+ * the amount is at or above its threshold, the money-moving action is NOT
+ * executed immediately — an
  * Approval record is created carrying the parameters needed to execute it
  * later. Approving it executes the action for the first time; rejecting
  * it never posts/commits anything. Budgets and vendor-banking-change
@@ -35,6 +36,7 @@ import { postPayRunToLedger } from './payroll'
  * see docs/known-limitations.md.
  */
 export const APPROVAL_THRESHOLDS: Record<string, number> = {
+  'bill-post': 1000,
   'bill-payment': 500,
   'reimbursement-payment': 500,
   'purchase-order': 1000,
@@ -90,6 +92,30 @@ export async function requestApproval(
 
 /** Executes the pending action for an approved approval. */
 async function executeApprovedAction(tx: any, approval: any, actorId: string) {
+  if (approval.resourceType === 'bill-post') {
+    const bill = await tx.bill.findUnique({ where: { id: approval.resourceId }, include: { lines: true } })
+    if (!bill) throw new Error('Bill for this approval no longer exists')
+    if (bill.status !== 'draft') return bill
+    const entry = await postBillToLedger(
+      tx,
+      bill,
+      bill.lines.map((l: any) => ({
+        accountId: l.accountId,
+        description: l.description,
+        amount: l.amount.toString(),
+        quantity: l.quantity.toString(),
+        unitPrice: l.unitPrice.toString(),
+        productId: l.productId,
+      })),
+      actorId
+    )
+    return tx.bill.update({
+      where: { id: bill.id },
+      data: { status: 'open', journalEntryId: entry.id },
+      include: { lines: true, vendor: true, payments: true },
+    })
+  }
+
   if (approval.resourceType === 'bill-payment') {
     const bill = await tx.bill.findUnique({ where: { id: approval.resourceId } })
     if (!bill) throw new Error('Bill for this approval no longer exists')

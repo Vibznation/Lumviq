@@ -163,7 +163,11 @@ function ReimbursementsContent() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.id} className="border-t border-gray-100 dark:border-midnight-800">
-                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{r.payeeName}</td>
+                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
+                    <Link href={`/purchasing/reimbursements/${r.id}`} className="text-teal-700 dark:text-teal-400 hover:underline">
+                      {r.payeeName}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2"><span className={'inline-block rounded-full px-2 py-0.5 text-xs font-medium ' + (STATUS_STYLES[r.status] || '')}>{r.status}</span></td>
                   <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">{currency(r.amount)}</td>
                   <td className="px-4 py-2 text-right space-x-2">

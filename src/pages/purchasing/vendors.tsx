@@ -11,7 +11,7 @@ function VendorsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', phone: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', paymentTerms: '', taxId: '' })
   const [submitting, setSubmitting] = useState(false)
 
   async function load() {
@@ -49,7 +49,7 @@ function VendorsContent() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Could not create vendor')
       }
-      setForm({ name: '', email: '', phone: '' })
+      setForm({ name: '', email: '', phone: '', paymentTerms: '', taxId: '' })
       setShowForm(false)
       await load()
     } catch (err: any) {
@@ -113,6 +113,23 @@ function VendorsContent() {
               className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
             />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Payment terms</label>
+            <input
+              placeholder="e.g. Net 30"
+              value={form.paymentTerms}
+              onChange={(e) => setForm((f) => ({ ...f, paymentTerms: e.target.value }))}
+              className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Tax ID</label>
+            <input
+              value={form.taxId}
+              onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value }))}
+              className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+            />
+          </div>
           <button type="submit" disabled={submitting} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
             {submitting ? 'Saving…' : 'Save vendor'}
           </button>
@@ -131,6 +148,7 @@ function VendorsContent() {
                 <th className="px-4 py-2">Name</th>
                 <th className="px-4 py-2">Email</th>
                 <th className="px-4 py-2">Phone</th>
+                <th className="px-4 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -139,6 +157,11 @@ function VendorsContent() {
                   <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{v.name}</td>
                   <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{v.email || '—'}</td>
                   <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{v.phone || '—'}</td>
+                  <td className="px-4 py-2 text-right">
+                    <Link href={`/purchasing/vendors/${v.id}`} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+                      View →
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

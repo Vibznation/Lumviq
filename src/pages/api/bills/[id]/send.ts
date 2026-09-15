@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { postBillToLedger } from '../../../../lib/purchasing'
+import { amountRequiresApproval, requestApproval } from '../../../../lib/approvals'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -9,13 +10,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   const id = req.query.id as string
-  const bill = await prisma.bill.findUnique({ where: { id }, include: { lines: true } })
+  const bill = await prisma.bill.findUnique({ where: { id }, include: { lines: true, vendor: true } })
   if (!bill) return res.status(404).json({ error: 'Bill not found' })
   if (!(await userHasMembership(user.id, bill.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (bill.status !== 'draft') return res.status(400).json({ error: 'Only draft bills can be sent' })
   if (bill.voidedAt) return res.status(400).json({ error: 'Bill has been voided' })
 
   try {
+    const org = await prisma.organization.findUnique({ where: { id: bill.organizationId } })
+    if (amountRequiresApproval('bill-post', Number(bill.total), org?.approvalThresholds as any)) {
+      const approval = await prisma.$transaction((tx) =>
+        requestApproval(tx, {
+          organizationId: bill.organizationId,
+          resourceType: 'bill-post',
+          resourceId: bill.id,
+          amount: bill.total.toString(),
+          payload: {},
+          requestedByUserId: user.id,
+          note: `Bill ${bill.billNumber} from ${bill.vendor?.name || 'vendor'}`,
+        })
+      )
+      return res.status(202).json({ requiresApproval: true, approval })
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const entry = await postBillToLedger(
         tx,

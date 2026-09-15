@@ -15,11 +15,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { organizationId, name, email, phone, address } = req.body || {}
+    const { organizationId, name, email, phone, address, paymentTerms, taxId } = req.body || {}
     if (!organizationId || !name) return res.status(400).json({ error: 'organizationId and name are required' })
     if (!(await userHasMembership(user.id, organizationId))) return res.status(403).json({ error: 'Forbidden' })
     const vendor = await prisma.vendor.create({
-      data: { organizationId, name, email: email || null, phone: phone || null, address: address || null },
+      data: {
+        organizationId,
+        name,
+        email: email || null,
+        phone: phone || null,
+        address: address || null,
+        paymentTerms: paymentTerms || null,
+        taxId: taxId || null,
+      },
     })
     return res.status(201).json(vendor)
   }

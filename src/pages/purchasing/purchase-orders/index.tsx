@@ -96,17 +96,24 @@ function PurchaseOrdersContent() {
             <tbody>
               {pos.map((po) => (
                 <tr key={po.id} className="border-t border-gray-100 dark:border-midnight-800 hover:bg-gray-50 dark:hover:bg-midnight-800">
-                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{po.poNumber}</td>
+                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100">
+                    <Link href={`/purchasing/purchase-orders/${po.id}`} className="text-teal-700 dark:text-teal-400 hover:underline">
+                      {po.poNumber}
+                    </Link>
+                  </td>
                   <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{po.vendor?.name}</td>
                   <td className="px-4 py-2"><span className={'inline-block rounded-full px-2 py-0.5 text-xs font-medium ' + (STATUS_STYLES[po.status] || '')}>{po.status}</span></td>
                   <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{po.expectedDate ? new Date(po.expectedDate).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-2 text-right text-gray-900 dark:text-gray-100">{currency(po.total)}</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="px-4 py-2 text-right space-x-2">
                     {po.status !== 'received' && po.status !== 'closed' && (
                       <button onClick={() => handleConvert(po.id)} disabled={converting === po.id} className="text-xs text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
                         {converting === po.id ? 'Converting…' : 'Convert to bill'}
                       </button>
                     )}
+                    <Link href={`/purchasing/purchase-orders/${po.id}`} className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+                      View →
+                    </Link>
                   </td>
                 </tr>
               ))}

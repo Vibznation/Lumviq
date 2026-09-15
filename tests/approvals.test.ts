@@ -30,4 +30,10 @@ describe('amountRequiresApproval', () => {
     expect(amountRequiresApproval('budget-change', 4999)).toBe(false)
     expect(amountRequiresApproval('budget-change', 5000)).toBe(true)
   })
+
+  it('gates bill posting at or above the default threshold', () => {
+    expect(APPROVAL_THRESHOLDS['bill-post']).toBe(1000)
+    expect(amountRequiresApproval('bill-post', 999)).toBe(false)
+    expect(amountRequiresApproval('bill-post', 1000)).toBe(true)
+  })
 })
