@@ -5,12 +5,15 @@ import ProtectedRoute from '../../components/ProtectedRoute'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type BankAccount = { id: string; name: string }
+type LedgerAccount = { id: string; name: string; code: string }
 
 function BankImportContent() {
   const { token, currentOrg } = useAuth()
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [bankAccountId, setBankAccountId] = useState('')
   const [newAccountName, setNewAccountName] = useState('')
+  const [ledgerAccounts, setLedgerAccounts] = useState<LedgerAccount[]>([])
+  const [linkedAccountId, setLinkedAccountId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState('')
 
@@ -23,8 +26,16 @@ function BankImportContent() {
     if (accounts.length > 0 && !bankAccountId) setBankAccountId(accounts[0].id)
   }
 
+  async function loadLedgerAccounts() {
+    if (!currentOrg) return
+    const res = await fetch(`/api/accounts?organizationId=${currentOrg.id}`, { headers: authHeaders(token) })
+    if (!res.ok) return
+    setLedgerAccounts(await res.json())
+  }
+
   useEffect(() => {
     loadBankAccounts()
+    loadLedgerAccounts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id])
 
@@ -34,11 +45,12 @@ function BankImportContent() {
     const res = await fetch('/api/banking/accounts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-      body: JSON.stringify({ organizationId: currentOrg.id, name: newAccountName }),
+      body: JSON.stringify({ organizationId: currentOrg.id, name: newAccountName, accountId: linkedAccountId || undefined }),
     })
     if (res.ok) {
       const account = await res.json()
       setNewAccountName('')
+      setLinkedAccountId('')
       await loadBankAccounts()
       setBankAccountId(account.id)
     }
@@ -104,17 +116,27 @@ function BankImportContent() {
         ) : (
           <p className="mt-1 text-sm text-gray-500">No bank accounts yet — create one below.</p>
         )}
-        <form onSubmit={createBankAccount} className="mt-3 flex gap-2">
-          <input
-            type="text"
-            placeholder="New bank account name"
-            value={newAccountName}
-            onChange={(e) => setNewAccountName(e.target.value)}
-            className="flex-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
-          />
-          <button type="submit" className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">
-            Add
-          </button>
+        <form onSubmit={createBankAccount} className="mt-3 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="New bank account name"
+              value={newAccountName}
+              onChange={(e) => setNewAccountName(e.target.value)}
+              className="flex-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+            />
+            <button type="submit" className="rounded-md border border-gray-300 dark:border-midnight-700 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-midnight-800">
+              Add
+            </button>
+          </div>
+          <select
+            value={linkedAccountId}
+            onChange={(e) => setLinkedAccountId(e.target.value)}
+            className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+          >
+            <option value="">Link to ledger cash account (optional)</option>
+            {ledgerAccounts.map((a) => <option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}
+          </select>
         </form>
       </div>
 

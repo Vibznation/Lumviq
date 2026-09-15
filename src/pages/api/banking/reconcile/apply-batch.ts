@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
-import { jaccard, daysBetween } from '../../../../lib/reconcile-utils'
+import { scoreMatch, journalLineWhereForBankAccount } from '../../../../lib/reconcile-utils'
 import { requireUserFromRequest, requireMembershipOrThrow, userHasPermission } from '../../../../lib/authorization'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -16,26 +17,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try { await requireMembershipOrThrow(user.id, session.organizationId) } catch (e: any) { return res.status(403).json({ error: 'Not a member' }) }
   const hasPerm = await userHasPermission(user.id, session.organizationId, 'bank.reconcile')
   if (!hasPerm) return res.status(403).json({ error: 'Insufficient permissions' })
+  if (!(await enforceFeature(res, prisma, session.organizationId, 'accounting.bank-reconciliation'))) return
 
   const toApply: Array<{ bankTransactionId: string, journalLineId: string }> = []
   if (Array.isArray(mappings) && mappings.length > 0) {
     for (const m of mappings) toApply.push({ bankTransactionId: m.bankTransactionId, journalLineId: m.journalLineId })
   } else if (strategy === 'auto') {
+    const bankAccount = await prisma.bankAccount.findUnique({ where: { id: session.bankAccountId } })
     const bankTx = await prisma.bankTransaction.findMany({ where: { bankAccountId: session.bankAccountId, transactionDate: { gte: session.startDate, lte: session.endDate }, isCleared: false } })
-    const journalLines = await prisma.journalLine.findMany({ where: { journalEntry: { organizationId: session.organizationId } }, include: { journalEntry: true } })
-    const amountTolerance = 0.1
-    const dateTolerance = 7
+    const journalLines = await prisma.journalLine.findMany({
+      where: journalLineWhereForBankAccount(session.organizationId, bankAccount?.accountId) as any,
+      include: { journalEntry: true },
+    })
     for (const tx of bankTx) {
       const txAmt = Number(tx.amount)
       let best: any = null
       for (const jl of journalLines) {
-        const jlAmt = Number(jl.amount)
-        const rel = Math.abs(txAmt - jlAmt) / Math.max(Math.abs(txAmt), Math.abs(jlAmt), 0.01)
-        const amountScore = Math.max(0, 1 - rel / amountTolerance)
-        const days = daysBetween(tx.transactionDate, jl.journalEntry.postedAt || jl.journalEntry.createdAt)
-        const dateScore = Math.max(0, 1 - days / dateTolerance)
-        const descScore = jaccard(tx.description || '', jl.description || jl.journalEntry.description || '')
-        const confidence = amountScore * 0.6 + dateScore * 0.2 + descScore * 0.2
+        const confidence = scoreMatch(
+          txAmt,
+          tx.transactionDate,
+          tx.description || '',
+          Number(jl.amount),
+          jl.journalEntry.postedAt || jl.journalEntry.createdAt,
+          jl.description || jl.journalEntry.description || ''
+        )
         if (!best || confidence > best.confidence) best = { jl, confidence }
       }
       if (best && best.confidence >= 0.5) toApply.push({ bankTransactionId: tx.id, journalLineId: best.jl.id })

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, requireMembershipOrThrow, userHasPermission } from '../../../../lib/authorization'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -13,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try { await requireMembershipOrThrow(user.id, session.organizationId) } catch (e: any) { return res.status(403).json({ error: 'Not a member' }) }
   const hasPerm = await userHasPermission(user.id, session.organizationId, 'bank.reconcile')
   if (!hasPerm) return res.status(403).json({ error: 'Insufficient permissions' })
+  if (!(await enforceFeature(res, prisma, session.organizationId, 'accounting.bank-reconciliation'))) return
 
   let item: any = null
   try {

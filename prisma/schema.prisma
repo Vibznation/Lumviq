@@ -173,6 +173,7 @@ model Account {
   billLines      BillLine[]
   budgets        Budget[]
   accountReconciliations AccountReconciliation[]
+  bankAccounts   BankAccount[]
 
   @@map("accounts")
 }
@@ -211,6 +212,7 @@ model JournalLine {
   account       Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
   dimensionValue DimensionValue? @relation(fields: [dimensionValueId], references: [id], onDelete: SetNull)
   accountReconciliation AccountReconciliation? @relation("JournalLineAccountReconciliation", fields: [accountReconciliationId], references: [id], onDelete: SetNull)
+  reconciliationMatches ReconciliationItem[]
 
   @@map("journal_lines")
 }
@@ -395,6 +397,7 @@ model InvoicePayment {
 model BankAccount {
   id             String                @id @default(uuid()) @db.Uuid
   organizationId String                @map("organization_id")
+  accountId      String?               @map("account_id")
   provider       String?
   name           String
   accountNumber  String?               @map("account_number")
@@ -402,6 +405,7 @@ model BankAccount {
   createdAt      DateTime              @default(now()) @map("created_at")
 
   organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        Account?              @relation(fields: [accountId], references: [id], onDelete: SetNull)
   transactions   BankTransaction[]     @relation("BankAccountTransactions")
   reconciliationSessions ReconciliationSession[] @relation("BankAccountReconciliationSessions")
 
@@ -432,6 +436,7 @@ model ReconciliationSession {
   startDate      DateTime               @map("start_date")
   endDate        DateTime               @map("end_date")
   status         String                 @default("open")
+  statementEndingBalance Decimal?       @map("statement_ending_balance") @db.Decimal(20, 6)
   createdAt      DateTime               @default(now()) @map("created_at")
   closedAt       DateTime?              @map("closed_at")
 
@@ -451,6 +456,7 @@ model ReconciliationItem {
 
   session             ReconciliationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade, name: "ReconciliationSessionItems")
   bankTransaction     BankTransaction      @relation(fields: [bankTransactionId], references: [id], onDelete: Cascade, name: "BankTransactionReconciliationItems")
+  matchedToJournalLine JournalLine?        @relation(fields: [matchedToJournalLineId], references: [id], onDelete: SetNull)
 
   @@unique([bankTransactionId])
   @@map("reconciliation_items")

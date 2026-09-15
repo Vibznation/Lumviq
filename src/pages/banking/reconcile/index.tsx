@@ -11,6 +11,10 @@ function ReconcileIndexContent() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([])
   const [bankAccountId, setBankAccountId] = useState('')
   const [status, setStatus] = useState('')
+  const today = new Date().toISOString().slice(0, 10)
+  const [startDate, setStartDate] = useState(today)
+  const [endDate, setEndDate] = useState(today)
+  const [statementEndingBalance, setStatementEndingBalance] = useState('')
 
   async function fetchSessions() {
     if (!currentOrg) return
@@ -37,12 +41,16 @@ function ReconcileIndexContent() {
   async function start() {
     if (!currentOrg) return
     if (!bankAccountId) return setStatus('Create a bank account on the Import page first')
-    const startDate = new Date().toISOString().slice(0, 10)
-    const endDate = startDate
     const res = await fetch('/api/banking/reconcile/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-      body: JSON.stringify({ organizationId: currentOrg.id, bankAccountId, startDate, endDate }),
+      body: JSON.stringify({
+        organizationId: currentOrg.id,
+        bankAccountId,
+        startDate,
+        endDate,
+        statementEndingBalance: statementEndingBalance || undefined,
+      }),
     })
     if (res.ok) {
       setStatus('Session started')
@@ -58,7 +66,7 @@ function ReconcileIndexContent() {
       <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Reconciliation Sessions</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
 
-      <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 mb-6 flex items-end gap-3">
+      <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 mb-6 flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor="bankAccount" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Bank account</label>
           {bankAccounts.length > 0 ? (
@@ -75,6 +83,22 @@ function ReconcileIndexContent() {
               No bank accounts yet — <Link href="/banking/import" className="text-teal-700 dark:text-teal-400 hover:underline">create one</Link>.
             </p>
           )}
+        </div>
+        <div>
+          <label htmlFor="startDate" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Start date</label>
+          <input id="startDate" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+            className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label htmlFor="endDate" className="block text-xs font-medium text-gray-600 dark:text-gray-400">End date</label>
+          <input id="endDate" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
+            className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm" />
+        </div>
+        <div>
+          <label htmlFor="statementEndingBalance" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Statement ending balance (optional)</label>
+          <input id="statementEndingBalance" type="number" step="0.01" value={statementEndingBalance} onChange={(e) => setStatementEndingBalance(e.target.value)}
+            placeholder="e.g. 1234.56"
+            className="mt-1 rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm w-40" />
         </div>
         <button onClick={start} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
           Start new session

@@ -142,8 +142,19 @@ function SessionContent() {
       body: JSON.stringify({ sessionId: id })
     })
 
-    if (res.ok) setStatus('Session closed')
-    else setStatus('Failed to close')
+    if (res.ok) {
+      const j = await readJsonResponse<{ unmatchedCount?: number; varianceFromStatement?: number | null }>(res, {})
+      let message = 'Session closed'
+      if (typeof j.unmatchedCount === 'number' && j.unmatchedCount > 0) {
+        message += ` — ${j.unmatchedCount} transaction(s) in range were left unmatched`
+      }
+      if (typeof j.varianceFromStatement === 'number' && Math.abs(j.varianceFromStatement) > 0.005) {
+        message += `; variance from statement balance: ${j.varianceFromStatement.toFixed(2)}`
+      }
+      setStatus(message)
+    } else {
+      setStatus('Failed to close')
+    }
   }
 
   return (

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { requestApproval } from '../../../../lib/approvals'
+import { enforceFeature } from '../../../../lib/entitlements'
 
 /**
  * Editing an existing bank account's connection details. Changing the
@@ -23,7 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') return res.status(200).json(account)
 
   if (req.method === 'PATCH') {
-    const { name, provider, accountNumber, currency } = req.body || {}
+    if (!(await enforceFeature(res, prisma, account.organizationId, 'accounting.bank-reconciliation'))) return
+    const { name, provider, accountNumber, currency, accountId } = req.body || {}
     const changingSensitiveDetails =
       (accountNumber !== undefined && accountNumber !== account.accountNumber) ||
       (provider !== undefined && provider !== account.provider)
@@ -42,11 +44,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(202).json({ requiresApproval: true, approval })
     }
 
+    if (accountId !== undefined && accountId !== null) {
+      const linkedAccount = await prisma.account.findUnique({ where: { id: accountId } })
+      if (!linkedAccount || linkedAccount.organizationId !== account.organizationId) {
+        return res.status(400).json({ error: 'accountId does not belong to this organization' })
+      }
+    }
+
     const updated = await prisma.bankAccount.update({
       where: { id },
       data: {
         ...(name !== undefined ? { name } : {}),
         ...(currency !== undefined ? { currency } : {}),
+        ...(accountId !== undefined ? { accountId: accountId || null } : {}),
       },
     })
     return res.status(200).json(updated)

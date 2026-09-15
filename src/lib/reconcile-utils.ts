@@ -19,3 +19,37 @@ export function daysBetween(a?: string | Date, b?: string | Date) {
   const diff = Math.abs(da.getTime() - db.getTime())
   return Math.round(diff / (1000 * 60 * 60 * 24))
 }
+
+/** Weighted confidence score (0-1) for a candidate bank-transaction/journal-line match. */
+export function scoreMatch(
+  txAmount: number,
+  txDate: string | Date,
+  txDescription: string,
+  lineAmount: number,
+  lineDate: string | Date | undefined,
+  lineDescription: string,
+  amountTolerance = 0.1,
+  dateTolerance = 7
+) {
+  const rel = Math.abs(txAmount - lineAmount) / Math.max(Math.abs(txAmount), Math.abs(lineAmount), 0.01)
+  const amountScore = Math.max(0, 1 - rel / amountTolerance)
+  const days = daysBetween(txDate, lineDate)
+  const dateScore = Math.max(0, 1 - days / dateTolerance)
+  const descScore = jaccard(txDescription || '', lineDescription || '')
+  return amountScore * 0.6 + dateScore * 0.2 + descScore * 0.2
+}
+
+/**
+ * Prisma `where` clause for candidate journal lines for a reconciliation
+ * session's bank account. If the BankAccount is linked to a real
+ * chart-of-accounts Account (`BankAccount.accountId`), candidates are
+ * scoped to that single account's lines — matching a bank statement
+ * against the correct ledger cash account instead of every line in the
+ * organization. Falls back to org-wide (all accounts) when no link is
+ * set, preserving prior behavior for unlinked bank accounts.
+ */
+export function journalLineWhereForBankAccount(organizationId: string, linkedAccountId?: string | null) {
+  return linkedAccountId
+    ? { accountId: linkedAccountId, journalEntry: { organizationId } }
+    : { journalEntry: { organizationId } }
+}
