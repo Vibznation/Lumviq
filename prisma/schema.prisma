@@ -74,6 +74,13 @@ model Organization {
   dimensions     Dimension[]
   contractors    Contractor[]
   aiInteractions AiInteraction[]
+  paySchedules         PaySchedule[]
+  ptoPolicies          PtoPolicy[]
+  taxFilings           TaxFiling[]
+  payrollTaxDocuments  PayrollTaxDocument[]
+  payrollProviderLinks PayrollProviderLink[]
+  payrollWebhookEvents PayrollWebhookEvent[]
+  directDepositAccounts DirectDepositAccount[]
   webhooks       Webhook[]
   estimates      Estimate[]
   purchaseOrders PurchaseOrder[]
@@ -618,6 +625,7 @@ model Project {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   timeEntries    TimeEntry[]
   assignments    ProjectAssignment[]
+  payRunLines    PayRunLine[]
 
   @@map("projects")
 }
@@ -658,55 +666,137 @@ model Budget {
   @@map("budgets")
 }
 
+/// Employee master record. Extended in place (Definition of Done, full
+/// payroll spec) with onboarding/personal/tax/organizational fields — the
+/// original salary/hourly fields (payType, rate) are unchanged so existing
+/// pay runs keep working. SSN is never stored in plaintext: ssnEncrypted
+/// holds an AES-256-GCM ciphertext (src/lib/encryption.ts) and only
+/// ssnLast4 is ever surfaced through the API.
 model Employee {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @map("organization_id")
-  name           String
-  email          String?
-  payType        String    @default("salary") @map("pay_type")
-  rate           Decimal   @db.Decimal(20, 6)
-  active         Boolean   @default(true)
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id                    String    @id @default(uuid()) @db.Uuid
+  organizationId        String    @map("organization_id")
+  userId                String?   @map("user_id")
+  name                  String
+  preferredName         String?   @map("preferred_name")
+  email                 String?
+  phone                 String?
+  addressLine1          String?   @map("address_line1")
+  addressLine2          String?   @map("address_line2")
+  city                  String?
+  state                 String?
+  postalCode            String?   @map("postal_code")
+  dateOfBirth           DateTime? @map("date_of_birth")
+  ssnEncrypted          String?   @map("ssn_encrypted")
+  ssnLast4              String?   @map("ssn_last4")
+  payType               String    @default("salary") @map("pay_type")
+  rate                  Decimal   @db.Decimal(20, 6)
+  overtimeEligible      Boolean   @default(true) @map("overtime_eligible")
+  /// 'active' | 'on_leave' | 'terminated'
+  employmentStatus      String    @default("active") @map("employment_status")
+  hireDate              DateTime? @map("hire_date")
+  terminationDate       DateTime? @map("termination_date")
+  department            String?
+  jobTitle              String?   @map("job_title")
+  managerId             String?   @map("manager_id")
+  locationId            String?   @map("location_id")
+  payScheduleId         String?   @map("pay_schedule_id")
+  /// 'not_started' | 'information_required' | 'verification_pending' | 'ready' | 'complete'
+  onboardingStatus      String    @default("not_started") @map("onboarding_status")
+  emergencyContactName  String?   @map("emergency_contact_name")
+  emergencyContactPhone String?   @map("emergency_contact_phone")
+  providerEmployeeId    String?   @map("provider_employee_id")
+  active                Boolean   @default(true)
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  manager        Employee?    @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports        Employee[]   @relation("EmployeeManager")
+  location       Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  paySchedule    PaySchedule? @relation(fields: [payScheduleId], references: [id], onDelete: SetNull)
   payRunLines    PayRunLine[]
+  taxProfile     EmployeeTaxProfile?
+  directDeposits DirectDepositAccount[]
+  deductions     Deduction[]
+  garnishments   Garnishment[]
+  ptoBalances    PtoBalance[]
+  ptoRequests    PtoRequest[]
 
   @@map("employees")
 }
 
+/// Extended in place for the full payroll-run workflow. status now moves
+/// through: draft, calculating, calculated, needs_attention,
+/// awaiting_approval, approved, submitted, processing,
+/// partially_processed, paid, completed, failed, cancelled, voided,
+/// reversed — see src/lib/payroll-run.ts for the state machine. Existing
+/// draft/posted-era rows remain valid ('posted' is treated as an alias
+/// for 'completed' by code that reads status).
 model PayRun {
-  id               String    @id @default(uuid()) @db.Uuid
-  organizationId   String    @map("organization_id")
-  payPeriodStart   DateTime  @map("pay_period_start")
-  payPeriodEnd     DateTime  @map("pay_period_end")
-  status           String    @default("draft")
-  totalGross       Decimal   @default(0) @db.Decimal(20, 6) @map("total_gross")
-  totalEmployeeTax Decimal   @default(0) @db.Decimal(20, 6) @map("total_employee_tax")
-  totalEmployerTax Decimal   @default(0) @db.Decimal(20, 6) @map("total_employer_tax")
-  totalNetPay      Decimal   @default(0) @db.Decimal(20, 6) @map("total_net_pay")
-  journalEntryId   String?   @unique @map("journal_entry_id")
-  postedAt         DateTime? @map("posted_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
+  id                     String    @id @default(uuid()) @db.Uuid
+  organizationId         String    @map("organization_id")
+  payScheduleId          String?   @map("pay_schedule_id")
+  payPeriodStart         DateTime  @map("pay_period_start")
+  payPeriodEnd           DateTime  @map("pay_period_end")
+  status                 String    @default("draft")
+  offCycle               Boolean   @default(false) @map("off_cycle")
+  totalGross             Decimal   @default(0) @db.Decimal(20, 6) @map("total_gross")
+  totalEmployeeTax       Decimal   @default(0) @db.Decimal(20, 6) @map("total_employee_tax")
+  totalEmployerTax       Decimal   @default(0) @db.Decimal(20, 6) @map("total_employer_tax")
+  totalPretaxDeductions  Decimal   @default(0) @db.Decimal(20, 6) @map("total_pretax_deductions")
+  totalPosttaxDeductions Decimal   @default(0) @db.Decimal(20, 6) @map("total_posttax_deductions")
+  totalGarnishments      Decimal   @default(0) @db.Decimal(20, 6) @map("total_garnishments")
+  totalReimbursements    Decimal   @default(0) @db.Decimal(20, 6) @map("total_reimbursements")
+  totalEmployerBenefitsCost Decimal @default(0) @db.Decimal(20, 6) @map("total_employer_benefits_cost")
+  totalNetPay            Decimal   @default(0) @db.Decimal(20, 6) @map("total_net_pay")
+  debitDate              DateTime? @map("debit_date")
+  employeePaymentDate    DateTime? @map("employee_payment_date")
+  taxPaymentDate         DateTime? @map("tax_payment_date")
+  providerPayrollId      String?   @map("provider_payroll_id")
+  journalEntryId         String?   @unique @map("journal_entry_id")
+  reversalOfPayRunId     String?   @unique @map("reversal_of_pay_run_id")
+  preparedByUserId       String?   @map("prepared_by_user_id")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedAt             DateTime? @map("approved_at")
+  failureReason          String?   @map("failure_reason")
+  postedAt               DateTime? @map("posted_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paySchedule    PaySchedule? @relation(fields: [payScheduleId], references: [id], onDelete: SetNull)
+  reversalOf     PayRun?      @relation("PayRunReversal", fields: [reversalOfPayRunId], references: [id], onDelete: SetNull)
+  reversedBy     PayRun?      @relation("PayRunReversal")
   lines          PayRunLine[]
+  payStubs       PayStub[]
 
   @@map("pay_runs")
 }
 
 model PayRunLine {
-  id          String   @id @default(uuid()) @db.Uuid
-  payRunId    String   @map("pay_run_id")
-  employeeId  String   @map("employee_id")
-  grossPay    Decimal  @db.Decimal(20, 6) @map("gross_pay")
-  employeeTax Decimal  @default(0) @db.Decimal(20, 6) @map("employee_tax")
-  netPay      Decimal  @default(0) @db.Decimal(20, 6) @map("net_pay")
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id                   String   @id @default(uuid()) @db.Uuid
+  payRunId             String   @map("pay_run_id")
+  employeeId           String   @map("employee_id")
+  regularHours         Decimal? @db.Decimal(9, 2) @map("regular_hours")
+  overtimeHours        Decimal? @db.Decimal(9, 2) @map("overtime_hours")
+  grossPay             Decimal  @db.Decimal(20, 6) @map("gross_pay")
+  pretaxDeductions     Decimal  @default(0) @db.Decimal(20, 6) @map("pretax_deductions")
+  employeeTax          Decimal  @default(0) @db.Decimal(20, 6) @map("employee_tax")
+  posttaxDeductions    Decimal  @default(0) @db.Decimal(20, 6) @map("posttax_deductions")
+  garnishmentAmount    Decimal  @default(0) @db.Decimal(20, 6) @map("garnishment_amount")
+  reimbursements       Decimal  @default(0) @db.Decimal(20, 6) @map("reimbursements")
+  employerTax          Decimal  @default(0) @db.Decimal(20, 6) @map("employer_tax")
+  employerBenefitsCost Decimal  @default(0) @db.Decimal(20, 6) @map("employer_benefits_cost")
+  netPay               Decimal  @default(0) @db.Decimal(20, 6) @map("net_pay")
+  projectId            String?  @map("project_id")
+  locationId           String?  @map("location_id")
+  description          String?
+  createdAt            DateTime @default(now()) @map("created_at")
 
-  payRun      PayRun   @relation(fields: [payRunId], references: [id], onDelete: Cascade)
-  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  payRun      PayRun    @relation(fields: [payRunId], references: [id], onDelete: Cascade)
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  location    Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  payStub     PayStub?
 
   @@map("pay_run_lines")
 }
@@ -966,17 +1056,27 @@ model MileageLog {
 /// Lightweight 1099 contractor directory entry, optionally linked to a
 /// Vendor record used for bill payments.
 model Contractor {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @map("organization_id")
-  vendorId       String?   @map("vendor_id")
-  name           String
-  email          String?
-  taxIdLast4     String?   @map("tax_id_last4")
-  active         Boolean   @default(true)
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id                String    @id @default(uuid()) @db.Uuid
+  organizationId    String    @map("organization_id")
+  vendorId          String?   @map("vendor_id")
+  name              String
+  email             String?
+  businessName      String?   @map("business_name")
+  /// W-9 box 3 classification: 'individual' | 'sole_proprietor' | 'llc' | 'c_corp' | 's_corp' | 'partnership' | 'other'
+  taxClassification String?   @map("tax_classification")
+  taxIdEncrypted    String?   @map("tax_id_encrypted")
+  taxIdLast4        String?   @map("tax_id_last4")
+  /// 'not_collected' | 'pending' | 'verified'
+  w9Status          String    @default("not_collected") @map("w9_status")
+  /// 'check' | 'direct_deposit'
+  paymentMethod     String    @default("check") @map("payment_method")
+  providerContractorId String? @map("provider_contractor_id")
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @map("created_at")
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  vendor         Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor            Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  directDeposits    DirectDepositAccount[]
 
   @@map("contractors")
 }
@@ -1185,6 +1285,8 @@ model Location {
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stockMovements StockMovement[]
+  employees      Employee[]
+  payRunLines    PayRunLine[]
 
   @@map("locations")
 }
@@ -1602,6 +1704,296 @@ model IntercompanyTransaction {
   counterpartyOrganization Organization @relation("IntercompanyCounterparty", fields: [counterpartyOrganizationId], references: [id], onDelete: Cascade)
 
   @@map("intercompany_transactions")
+}
+
+/// A recurring pay-frequency configuration employees are assigned to
+/// (e.g. weekly, biweekly, semimonthly, monthly). Drives the payroll-run
+/// calendar and Auto Payroll eligibility.
+model PaySchedule {
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationId     String    @map("organization_id")
+  name               String
+  /// 'weekly' | 'biweekly' | 'semimonthly' | 'monthly'
+  frequency          String    @default("biweekly")
+  anchorDate         DateTime  @map("anchor_date")
+  nextPayDate        DateTime? @map("next_pay_date")
+  autoPayrollEnabled Boolean   @default(false) @map("auto_payroll_enabled")
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employees    Employee[]
+  payRuns      PayRun[]
+
+  @@map("pay_schedules")
+}
+
+/// Federal/state withholding elections (W-4 / state equivalent), one row
+/// per employee. Only non-sensitive summary fields are ever returned by
+/// the API; nothing here is passed to Lumviq Intelligence/AI features.
+model EmployeeTaxProfile {
+  id                      String    @id @default(uuid()) @db.Uuid
+  employeeId              String    @unique @map("employee_id")
+  filingStatus            String    @default("single") @map("filing_status")
+  federalAllowances       Int       @default(0) @map("federal_allowances")
+  federalExtraWithholding Decimal   @default(0) @db.Decimal(12, 2) @map("federal_extra_withholding")
+  state                   String?
+  stateFilingStatus       String?   @map("state_filing_status")
+  stateAllowances         Int       @default(0) @map("state_allowances")
+  stateExtraWithholding   Decimal   @default(0) @db.Decimal(12, 2) @map("state_extra_withholding")
+  multiStateWorkStates    String[]  @default([]) @map("multi_state_work_states")
+  exemptFromFederal       Boolean   @default(false) @map("exempt_from_federal")
+  exemptFromState         Boolean   @default(false) @map("exempt_from_state")
+  providerTaxProfileId    String?   @map("provider_tax_profile_id")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("employee_tax_profiles")
+}
+
+/// Direct-deposit destination for an employee or contractor. Raw account
+/// and routing numbers are AES-256-GCM encrypted at rest
+/// (src/lib/encryption.ts); only accountLast4 + bankName are ever
+/// surfaced through the API.
+model DirectDepositAccount {
+  id                     String    @id @default(uuid()) @db.Uuid
+  organizationId         String    @map("organization_id")
+  /// 'employee' | 'contractor'
+  ownerType              String    @map("owner_type")
+  employeeId             String?   @map("employee_id")
+  contractorId           String?   @map("contractor_id")
+  bankName               String?   @map("bank_name")
+  accountType            String    @default("checking") @map("account_type")
+  routingNumberEncrypted String    @map("routing_number_encrypted")
+  accountNumberEncrypted String    @map("account_number_encrypted")
+  accountLast4           String    @map("account_last4")
+  /// 'amount' | 'percent' | 'remainder'
+  splitType              String    @default("remainder") @map("split_type")
+  splitValue             Decimal?  @db.Decimal(20, 6) @map("split_value")
+  priority               Int       @default(1)
+  /// 'pending' | 'verified' | 'failed'
+  verificationStatus     String    @default("pending") @map("verification_status")
+  providerAccountId      String?   @map("provider_account_id")
+  active                 Boolean   @default(true)
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employee     Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractor   Contractor?  @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@map("direct_deposit_accounts")
+}
+
+/// Pretax/post-tax deduction or employer-paid benefit line attached to an
+/// employee (medical/dental/vision premium, 401(k)/HSA/FSA, etc.).
+model Deduction {
+  id                  String    @id @default(uuid()) @db.Uuid
+  employeeId          String    @map("employee_id")
+  category            String
+  /// 'pretax' | 'posttax' | 'employer_only'
+  taxTreatment        String    @default("pretax") @map("tax_treatment")
+  /// 'fixed_amount' | 'percent_of_gross'
+  calculationMethod   String    @default("fixed_amount") @map("calculation_method")
+  employeeAmount      Decimal   @default(0) @db.Decimal(20, 6) @map("employee_amount")
+  employerAmount      Decimal   @default(0) @db.Decimal(20, 6) @map("employer_amount")
+  annualLimit         Decimal?  @db.Decimal(20, 6) @map("annual_limit")
+  effectiveDate       DateTime  @map("effective_date")
+  endDate             DateTime? @map("end_date")
+  priority            Int       @default(1)
+  providerDeductionId String?   @map("provider_deduction_id")
+  active              Boolean   @default(true)
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("deductions")
+}
+
+/// Legally-ordered wage garnishment (child support, tax levy, creditor
+/// garnishment, etc.). Lumviq applies the provider's withholding
+/// calculation and does not give legal advice about priority ordering.
+model Garnishment {
+  id                     String    @id @default(uuid()) @db.Uuid
+  employeeId             String    @map("employee_id")
+  garnishmentType        String    @map("garnishment_type")
+  orderNumber            String?   @map("order_number")
+  issuingAgency          String?   @map("issuing_agency")
+  /// 'fixed_amount' | 'percent_of_disposable'
+  calculationMethod      String    @default("fixed_amount") @map("calculation_method")
+  amount                 Decimal   @default(0) @db.Decimal(20, 6)
+  maxPercentOfDisposable Decimal?  @db.Decimal(5, 2) @map("max_percent_of_disposable")
+  priority               Int       @default(1)
+  remainingBalance       Decimal?  @db.Decimal(20, 6) @map("remaining_balance")
+  effectiveDate          DateTime  @map("effective_date")
+  endDate                DateTime? @map("end_date")
+  providerGarnishmentId  String?   @map("provider_garnishment_id")
+  active                 Boolean   @default(true)
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("garnishments")
+}
+
+/// Accrual policy for a PTO/sick-leave category (organization-level
+/// definition; employees accrue against it via PtoBalance).
+model PtoPolicy {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  name           String
+  category       String    @default("vacation")
+  /// 'per_pay_period' | 'annual_grant' | 'hours_worked'
+  accrualMethod  String    @default("per_pay_period") @map("accrual_method")
+  accrualRate    Decimal   @default(0) @db.Decimal(10, 4) @map("accrual_rate")
+  maxBalance     Decimal?  @db.Decimal(10, 2) @map("max_balance")
+  carryoverLimit Decimal?  @db.Decimal(10, 2) @map("carryover_limit")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  balances     PtoBalance[]
+
+  @@map("pto_policies")
+}
+
+model PtoBalance {
+  id           String   @id @default(uuid()) @db.Uuid
+  employeeId   String   @map("employee_id")
+  ptoPolicyId  String   @map("pto_policy_id")
+  balanceHours Decimal  @default(0) @db.Decimal(10, 2) @map("balance_hours")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  ptoPolicy PtoPolicy @relation(fields: [ptoPolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, ptoPolicyId])
+  @@map("pto_balances")
+}
+
+model PtoRequest {
+  id              String    @id @default(uuid()) @db.Uuid
+  employeeId      String    @map("employee_id")
+  ptoPolicyId     String?   @map("pto_policy_id")
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime  @map("end_date")
+  hours           Decimal   @db.Decimal(10, 2)
+  status          String    @default("pending")
+  reason          String?
+  decidedByUserId String?   @map("decided_by_user_id")
+  decidedAt       DateTime? @map("decided_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("pto_requests")
+}
+
+/// A federal/state/local payroll-tax filing obligation surfaced from the
+/// payroll provider (Form 941, 940, state withholding/unemployment
+/// returns, etc.). Lumviq displays and tracks status; the licensed
+/// provider remains the system of record for the actual filing.
+model TaxFiling {
+  id                   String    @id @default(uuid()) @db.Uuid
+  organizationId       String    @map("organization_id")
+  jurisdiction         String
+  formType             String    @map("form_type")
+  filingPeriodStart    DateTime  @map("filing_period_start")
+  filingPeriodEnd      DateTime  @map("filing_period_end")
+  dueDate              DateTime  @map("due_date")
+  amount               Decimal?  @db.Decimal(20, 6)
+  status               String    @default("pending")
+  providerFilingId     String?   @map("provider_filing_id")
+  providerConfirmation String?   @map("provider_confirmation")
+  failureReason        String?   @map("failure_reason")
+  filedAt              DateTime? @map("filed_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("tax_filings")
+}
+
+/// Generated employee/contractor tax document (W-2, W-3, 1099-NEC,
+/// 1099-MISC) for a given tax year, sourced from the payroll provider.
+model PayrollTaxDocument {
+  id                 String    @id @default(uuid()) @db.Uuid
+  organizationId     String    @map("organization_id")
+  /// 'employee' | 'contractor'
+  ownerType          String    @map("owner_type")
+  employeeId         String?   @map("employee_id")
+  contractorId       String?   @map("contractor_id")
+  documentType       String    @map("document_type")
+  taxYear            Int       @map("tax_year")
+  status             String    @default("pending")
+  providerDocumentId String?   @map("provider_document_id")
+  deliveredAt        DateTime? @map("delivered_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("payroll_tax_documents")
+}
+
+/// Generated paystub for a single employee within a pay run.
+model PayStub {
+  id             String   @id @default(uuid()) @db.Uuid
+  payRunId       String   @map("pay_run_id")
+  payRunLineId   String   @unique @map("pay_run_line_id")
+  employeeId     String   @map("employee_id")
+  payDate        DateTime @map("pay_date")
+  correctedForId String?  @map("corrected_for_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  payRun     PayRun     @relation(fields: [payRunId], references: [id], onDelete: Cascade)
+  payRunLine PayRunLine @relation(fields: [payRunLineId], references: [id], onDelete: Cascade)
+
+  @@map("pay_stubs")
+}
+
+/// Generic association between a Lumviq record and an external payroll
+/// provider's identifier (Check, Gusto Embedded, etc.). Mirrors the
+/// existing Document.relatedType/relatedId polymorphic pattern instead of
+/// adding a providerId column to every payroll-adjacent table.
+model PayrollProviderLink {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id")
+  provider       String
+  entityType     String    @map("entity_type")
+  entityId       String    @map("entity_id")
+  externalId     String    @map("external_id")
+  status         String    @default("active")
+  metadata       Json?
+  syncedAt       DateTime? @map("synced_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, entityType, entityId])
+  @@map("payroll_provider_links")
+}
+
+/// Idempotency ledger for inbound payroll-provider webhooks — a
+/// (provider, externalEventId) pair is processed at most once, mirroring
+/// the idempotencyKey pattern already used for journal entries
+/// (src/lib/payroll.ts).
+model PayrollWebhookEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String?   @map("organization_id")
+  provider        String
+  externalEventId String    @map("external_event_id")
+  eventType       String    @map("event_type")
+  payload         Json
+  processedAt     DateTime? @map("processed_at")
+  status          String    @default("received")
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, externalEventId])
+  @@map("payroll_webhook_events")
 }
 
 

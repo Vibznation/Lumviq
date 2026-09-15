@@ -23,15 +23,39 @@ const INTEGRATIONS = [
   },
 ]
 
+const PAYROLL_DESCRIPTION = 'Calculate tax withholding, file payroll tax returns, and pay employees/contractors via direct deposit.'
+const PAYROLL_DETAIL_NOT_CONNECTED = 'Requires a licensed payroll provider (e.g. Check, Gusto Embedded) to be contracted and connected. Until then, Lumviq only records the accounting impact of payroll totals you enter manually — see the Payroll page.'
+const PAYROLL_DETAIL_SANDBOX = 'Running in sandbox (test) mode against simplified, non-authoritative tax estimates — not a licensed provider. Do not use sandbox-calculated amounts to actually pay anyone or file taxes.'
+
 function IntegrationsContent() {
-  const { currentOrg } = useAuth()
+  const { currentOrg, token } = useAuth()
+  const [payrollMode, setPayrollMode] = React.useState<'sandbox' | 'none'>('none')
+
+  React.useEffect(() => {
+    if (!token) return
+    fetch('/api/integrations/payroll-status', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => { if (json?.mode === 'sandbox') setPayrollMode('sandbox') })
+      .catch(() => {})
+  }, [token])
+
+  const integrations = [
+    ...INTEGRATIONS,
+    {
+      name: 'Full-service payroll',
+      description: PAYROLL_DESCRIPTION,
+      status: payrollMode === 'sandbox' ? 'Sandbox (test mode)' : 'Not connected',
+      detail: payrollMode === 'sandbox' ? PAYROLL_DETAIL_SANDBOX : PAYROLL_DETAIL_NOT_CONNECTED,
+    },
+  ]
+
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Integrations</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
 
       <div className="space-y-4">
-        {INTEGRATIONS.map((integration) => (
+        {integrations.map((integration) => (
           <div key={integration.name} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-semibold text-midnight-900 dark:text-white">{integration.name}</h2>

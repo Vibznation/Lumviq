@@ -676,7 +676,7 @@ export const PAYMENTS_ADDON_STATUS =
   'Lumviq Payments requires a licensed payment processor to be configured for your organization. Until then, invoices can be marked paid manually or reconciled from imported bank activity.'
 
 export const PAYROLL_ADDON_STATUS =
-  'Lumviq does not calculate tax withholding, file payroll tax returns, or perform direct deposit. Payroll add-ons record the accounting impact of a pay run; run payroll with a licensed provider and enter the resulting totals.'
+  'Full-service Lumviq Payroll is currently being prepared. Availability begins after payroll-provider activation and compliance approval. Today, Payroll add-ons record the accounting impact of a pay run: run payroll with a licensed provider of your choice and enter the resulting totals — Lumviq does not calculate tax withholding, file payroll tax returns, or perform direct deposit on its own.'
 
 // ---------------------------------------------------------------------------
 // Everything-includes list (shown once beneath the pricing cards)

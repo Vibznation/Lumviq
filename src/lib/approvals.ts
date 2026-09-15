@@ -3,6 +3,7 @@ import { createAndPostBillPayment, postBillToLedger } from './purchasing'
 import { postJournalEntryTx, type JournalEntry } from './ledger'
 import { postReimbursementToLedger } from './reimbursements'
 import { postPayRunToLedger } from './payroll'
+import { submitApprovedPayRun, SeparationOfDutiesError } from './payroll-run'
 
 /**
  * Approval gating for sensitive money-moving actions, per prompt.md's
@@ -146,8 +147,21 @@ async function executeApprovedAction(tx: any, approval: any, actorId: string) {
   }
 
   if (approval.resourceType === 'payroll-run') {
+    // Separation of duties: whoever prepared/requested this pay run
+    // cannot also be the one approving it.
+    if (approval.requestedByUserId && approval.requestedByUserId === actorId) {
+      throw new SeparationOfDutiesError()
+    }
     const payRun = await tx.payRun.findUnique({ where: { id: approval.resourceId } })
     if (!payRun) throw new Error('Pay run for this approval no longer exists')
+    // New provider-backed workflow: calculated via src/lib/payroll-run.ts,
+    // status is 'awaiting_approval', and submitting to the provider (not
+    // ledger posting) is the correct action here.
+    if (payRun.status === 'awaiting_approval') {
+      return submitApprovedPayRun(tx, payRun.id, actorId)
+    }
+    // Legacy/manual-entry flow (no connected provider): totals were
+    // entered by hand and the run is posted straight to the ledger.
     if (payRun.status !== 'draft') return tx.payRun.findUnique({ where: { id: payRun.id }, include: { lines: { include: { employee: true } } } })
     const entry = await postPayRunToLedger(tx, payRun, actorId)
     return tx.payRun.update({

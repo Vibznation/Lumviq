@@ -4,21 +4,50 @@ Lumviq is transparent about what it does and does not do. This document lists
 explicit scope boundaries so no feature is misrepresented.
 
 ## Payroll
-- Lumviq records the **accounting impact** of a pay run only. It does not
-  calculate tax withholding, file payroll tax returns, or perform direct
-  deposit — those must come from a licensed payroll provider (e.g. Gusto,
-  ADP, QuickBooks Payroll).
-- Workflow: create a pay run with each employee's gross pay, run payroll
-  with your provider, then use **Enter provider totals** on the Payroll
-  page to record each employee's tax withholding and the employer's
-  payroll tax expense from the provider's report — before posting to the
-  ledger.
-- Posting then records: Debit Payroll Expense (gross) and Payroll Tax
-  Expense (employer taxes, if any); Credit Payroll Liabilities (net pay
-  owed to employees) and Payroll Taxes Payable (withholding + employer
-  taxes owed to agencies, if any). Remitting those liabilities (paying
-  employees/tax agencies) is recorded like any other bill payment — no
-  automatic direct deposit or tax filing is performed.
+- Lumviq now includes an architected full-service payroll workflow
+  (`src/lib/payroll-run.ts`, `src/lib/integrations/payroll.ts`) built
+  against a `PayrollProvider` adapter interface, but **no licensed
+  payroll provider is currently contracted or connected**. Lumviq itself
+  does not calculate authoritative tax withholding, classify workers, file
+  payroll tax returns, or move money — see
+  [integration-adapters.md](integration-adapters.md) for the full
+  provider-adapter design.
+- Two ways to use payroll today:
+  1. **Manual entry (always available, no provider required):** create a
+     pay run with each employee's gross pay, run payroll with your own
+     licensed provider, then use **Enter provider totals** on the Payroll
+     page to record each employee's tax withholding and the employer's
+     payroll tax expense from the provider's report, then post to the
+     ledger (`POST /api/pay-runs/[id]/post`).
+  2. **Sandbox (test mode) workflow:** with `PAYROLL_PROVIDER_MODE=sandbox`
+     set (never enabled by default, never in production), the full
+     calculate → submit for approval → approve → sync-to-paid lifecycle
+     (`POST /api/pay-runs/[id]/{calculate,submit-for-approval,sync,cancel,void}`)
+     can be exercised end-to-end against a deterministic simulated
+     provider. The sandbox's tax figures are flat-rate, non-authoritative
+     approximations — they must never be presented as real tax
+     calculation, filed with any agency, or used to actually pay anyone.
+- Posting records: Debit Payroll Expense (gross), Payroll Tax Expense
+  (employer taxes, if any), Employer Benefits Expense (if any), and
+  Reimbursement Expense (if any); Credit Payroll Liabilities (net pay
+  owed to employees), Payroll Taxes Payable (withholding + employer taxes,
+  if any), Payroll Deductions Payable (pretax/posttax deductions, if any),
+  Garnishments Payable (if any), and Employer Benefits Payable (if any).
+  Remitting those liabilities (paying employees/tax agencies/benefit
+  providers) is recorded like any other bill payment — no automatic
+  direct deposit or tax filing is performed by Lumviq itself.
+- Every pay run always requires a separate approver from whoever prepared
+  it (`APPROVAL_THRESHOLDS['payroll-run'] = 0`, separation-of-duties
+  enforced in `src/lib/approvals.ts`).
+- SSNs and bank routing/account numbers are stored encrypted at rest
+  (AES-256-GCM, `src/lib/encryption.ts`); only the last 4 digits are ever
+  displayed unmasked.
+- **Full-service payroll (calculating real tax withholding, filing
+  returns, direct depositing pay) is not yet available and pricing for it
+  is not finalized** — this requires actually contracting a licensed
+  payroll provider, which is a business/legal step outside what code
+  changes alone can complete. Marketing copy is worded accordingly (see
+  `src/lib/marketing-content.ts`).
 
 ## Tax
 - The Tax Summary report is informational — it shows tax collected on

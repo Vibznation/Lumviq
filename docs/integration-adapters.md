@@ -48,6 +48,56 @@ export interface OcrProvider {
   files be attached to a bill/invoice for record-keeping, but does not
   extract any data from them.
 
+## Payroll — `src/lib/integrations/payroll.ts` + `payroll-sandbox.ts`
+```ts
+export interface PayrollProvider {
+  readonly name: string
+  isConfigured(): boolean
+  // ...20+ methods: company/employee/contractor onboarding, bank account
+  // + tax profile configuration, pay schedules, calculate/preview/approve/
+  // cancel/void/off-cycle payroll, paystubs, tax liabilities/filings/
+  // documents, payment status, inbound webhook verification.
+}
+```
+- Unlike the three adapters above, this one ships a genuine
+  `SandboxPayrollProvider` implementation (deterministic, clearly
+  documented as non-authoritative flat-rate FICA/federal/state/FUTA/SUTA
+  approximations) so the full payroll-run workflow
+  (`src/lib/payroll-run.ts`: draft → calculate → awaiting_approval →
+  approve → submit → sync-to-paid/completed, plus cancel/void) can be
+  built and exercised end-to-end before a real licensed provider (Check,
+  Gusto Embedded, or similar) is contracted.
+- `getPayrollProvider()` only returns the sandbox instance when
+  `PAYROLL_PROVIDER_MODE=sandbox` is explicitly set; every other
+  environment (including production by default) correctly reports "no
+  payroll provider connected" and every provider-dependent action
+  (`calculatePayRun`, `submitApprovedPayRun`, `syncPayRunStatus`,
+  `cancelPayRun`, `voidPayRun`) throws `PayrollProviderNotConnectedError`.
+- Manual-entry payroll (enter a licensed provider's totals by hand, then
+  `POST /api/pay-runs` → `POST /api/pay-runs/[id]/post`) still works
+  exactly as before and does not require a connected provider —
+  `src/lib/payroll.ts`'s `postPayRunToLedger` only records the accounting
+  impact of whatever totals it's given.
+- Inbound webhook receiver: `POST /api/webhooks/payroll` verifies the
+  signature via the provider's `handleWebhook()`, records a
+  `PayrollWebhookEvent` row for idempotency (unique on
+  `[provider, externalEventId]`), then calls `syncPayRunStatus` — which
+  is also the only place a pay run gets posted to the ledger under the
+  provider workflow, and only once the provider reports `paid`/`completed`.
+- SSNs and bank routing/account numbers are encrypted at rest via
+  `src/lib/encryption.ts` (AES-256-GCM, `FIELD_ENCRYPTION_KEY` required in
+  production) — the first field-level PII encryption in this codebase.
+- Separation of duties: `src/lib/approvals.ts`'s `executeApprovedAction`
+  throws `SeparationOfDutiesError` if the user deciding a `payroll-run`
+  approval is the same user who requested it (i.e. the preparer cannot
+  also approve their own pay run).
+- To connect a real provider: implement `PayrollProvider` against the
+  provider's SDK, register it in `getPayrollProvider()`'s factory instead
+  of (or alongside, behind its own explicit mode flag) the sandbox
+  instance, and store provider credentials per-organization (never in
+  source control — see [security-notes.md](security-notes.md)). No call
+  site changes are needed elsewhere.
+
 ## Webhooks (outbound, Lumviq → external systems) — `src/lib/webhooks.ts`
 Unlike the three interfaces above (inbound provider integrations),
 webhooks are an **outbound** integration point Lumviq itself exposes:
@@ -83,7 +133,8 @@ the `EmailLog` table. Currently only the organization-invite flow uses
 this (`POST /api/orgs/invite`).
 
 ## Settings → Integrations page
-`src/pages/settings/integrations.tsx` always displays each of the three
-provider categories above as **"Not connected"**, consistent with the
-lib-level stubs — this page is not a UI bug, it is an accurate reflection
-of current capability.
+`src/pages/settings/integrations.tsx` displays Bank feeds/Payments/OCR as
+**"Not connected"** and Payroll as **"Not connected"** or **"Sandbox (test
+mode)"** (fetched live from `GET /api/integrations/payroll-status`),
+consistent with the lib-level stubs — this page is not a UI bug, it is an
+accurate reflection of current capability.
