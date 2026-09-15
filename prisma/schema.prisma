@@ -33,6 +33,8 @@ model Organization {
   billingCycle   String                  @default("monthly") @map("billing_cycle")
   addOns         String[]                @default([]) @map("add_ons")
   approvalThresholds Json?               @map("approval_thresholds")
+  logoUrl        String?                 @map("logo_url")
+  brandColor     String?                 @map("brand_color")
   idempotencyKey String?                 @unique @map("idempotency_key")
   createdAt      DateTime                @default(now()) @map("created_at")
   updatedAt      DateTime                @updatedAt @map("updated_at")
@@ -51,6 +53,8 @@ model Organization {
   billPayments   BillPayment[]
   taxRates       TaxRate[]
   products       Product[]
+  creditNotes    CreditNote[]
+  invoiceRefunds InvoiceRefund[]
   stockMovements StockMovement[]
   projects       Project[]
   timeEntries    TimeEntry[]
@@ -277,8 +281,47 @@ model Customer {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoices       Invoice[]
   estimates      Estimate[]
+  creditNotes    CreditNote[]
 
   @@map("customers")
+}
+
+/// Credit memo issued to a customer, reducing what they owe (or owed to them via refund).
+model CreditNote {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id")
+  customerId      String    @map("customer_id")
+  creditNumber    String    @map("credit_number")
+  amount          Decimal   @db.Decimal(20, 6)
+  remainingAmount Decimal   @db.Decimal(20, 6) @map("remaining_amount")
+  reason          String?
+  incomeAccountId String    @map("income_account_id")
+  journalEntryId  String?   @unique @map("journal_entry_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer        Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, creditNumber])
+  @@map("credit_notes")
+}
+
+/// A cash refund issued to a customer against a specific invoice (e.g. an overpayment or a returned sale).
+model InvoiceRefund {
+  id               String    @id @default(uuid()) @db.Uuid
+  organizationId   String    @map("organization_id")
+  invoiceId        String    @map("invoice_id")
+  amount           Decimal   @db.Decimal(20, 6)
+  refundDate       DateTime  @map("refund_date")
+  reason           String?
+  depositAccountId String    @map("deposit_account_id")
+  journalEntryId   String?   @unique @map("journal_entry_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@map("invoice_refunds")
 }
 
 model Invoice {
@@ -296,6 +339,7 @@ model Invoice {
   taxTotal       Decimal           @default(0) @db.Decimal(20, 6) @map("tax_total")
   total          Decimal           @db.Decimal(20, 6)
   amountPaid     Decimal           @default(0) @db.Decimal(20, 6) @map("amount_paid")
+  paymentTerms   String?           @map("payment_terms")
   journalEntryId String?           @unique @map("journal_entry_id")
   voidedAt       DateTime?         @map("voided_at")
   createdAt      DateTime          @default(now()) @map("created_at")
@@ -306,6 +350,7 @@ model Invoice {
   taxRate        TaxRate?          @relation(fields: [taxRateId], references: [id], onDelete: SetNull)
   lines          InvoiceLine[]
   payments       InvoicePayment[]
+  refunds        InvoiceRefund[]
 
   @@unique([organizationId, invoiceNumber])
   @@map("invoices")
@@ -317,6 +362,7 @@ model InvoiceLine {
   description String
   quantity    Decimal  @default(1) @db.Decimal(20, 6)
   unitPrice   Decimal  @db.Decimal(20, 6) @map("unit_price")
+  discount    Decimal  @default(0) @db.Decimal(20, 6)
   amount      Decimal  @db.Decimal(20, 6)
   accountId   String   @map("account_id")
   productId   String?  @map("product_id")

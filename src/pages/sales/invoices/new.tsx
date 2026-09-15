@@ -9,11 +9,19 @@ type Account = { id: string; code: string; name: string; type: string }
 type TaxRate = { id: string; name: string; rate: string; isDefault: boolean }
 type ProjectOption = { id: string; name: string }
 type ProductOption = { id: string; name: string; salesPrice: string | null; incomeAccountId: string; active: boolean }
-type LineForm = { description: string; quantity: string; unitPrice: string; accountId: string; productId: string }
+type LineForm = { description: string; quantity: string; unitPrice: string; discount: string; accountId: string; productId: string }
 
 function emptyLine(): LineForm {
-  return { description: '', quantity: '1', unitPrice: '', accountId: '', productId: '' }
+  return { description: '', quantity: '1', unitPrice: '', discount: '', accountId: '', productId: '' }
 }
+
+const PAYMENT_TERM_PRESETS: Array<{ value: string; label: string; days: number | null }> = [
+  { value: 'due_on_receipt', label: 'Due on receipt', days: 0 },
+  { value: 'net_15', label: 'Net 15', days: 15 },
+  { value: 'net_30', label: 'Net 30', days: 30 },
+  { value: 'net_60', label: 'Net 60', days: 60 },
+  { value: 'custom', label: 'Custom', days: null },
+]
 
 function NewInvoiceContent() {
   const router = useRouter()
@@ -28,6 +36,7 @@ function NewInvoiceContent() {
   const [projectId, setProjectId] = useState('')
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
+  const [paymentTerms, setPaymentTerms] = useState('net_30')
   const [lines, setLines] = useState<LineForm[]>([emptyLine()])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -69,6 +78,15 @@ function NewInvoiceContent() {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
   }
 
+  function applyPaymentTerms(value: string, fromIssueDate = issueDate) {
+    setPaymentTerms(value)
+    const preset = PAYMENT_TERM_PRESETS.find((p) => p.value === value)
+    if (preset && preset.days != null) {
+      const base = new Date(fromIssueDate)
+      setDueDate(new Date(base.getTime() + preset.days * 86400000).toISOString().slice(0, 10))
+    }
+  }
+
   function selectProduct(index: number, productId: string) {
     if (!productId) {
       updateLine(index, { productId: '' })
@@ -95,7 +113,8 @@ function NewInvoiceContent() {
   const estimatedTotal = lines.reduce((sum, l) => {
     const qty = parseFloat(l.quantity) || 0
     const price = parseFloat(l.unitPrice) || 0
-    return sum + qty * price
+    const discount = parseFloat(l.discount) || 0
+    return sum + Math.max(qty * price - discount, 0)
   }, 0)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -123,10 +142,12 @@ function NewInvoiceContent() {
           dueDate,
           taxRateId: taxRateId || undefined,
           projectId: projectId || undefined,
+          paymentTerms,
           lines: lines.map((l) => ({
             description: l.description,
             quantity: l.quantity,
             unitPrice: l.unitPrice,
+            discount: l.discount || undefined,
             accountId: l.accountId,
             productId: l.productId || undefined,
           })),
@@ -184,7 +205,10 @@ function NewInvoiceContent() {
                 id="issueDate"
                 type="date"
                 value={issueDate}
-                onChange={(e) => setIssueDate(e.target.value)}
+                onChange={(e) => {
+                  setIssueDate(e.target.value)
+                  applyPaymentTerms(paymentTerms, e.target.value)
+                }}
                 className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
               />
             </div>
@@ -197,6 +221,26 @@ function NewInvoiceContent() {
                 onChange={(e) => setDueDate(e.target.value)}
                 className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
               />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Payment terms</label>
+            <div className="flex flex-wrap gap-2">
+              {PAYMENT_TERM_PRESETS.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => applyPaymentTerms(p.value)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium border ${
+                    paymentTerms === p.value
+                      ? 'bg-teal-600 border-teal-600 text-white'
+                      : 'border-gray-300 dark:border-midnight-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-midnight-800'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -231,7 +275,7 @@ function NewInvoiceContent() {
           <div className="space-y-3 mb-3">
             {lines.map((l, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-3">
+                <div className="col-span-2">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Product (optional)</label>
                   <select
                     value={l.productId}
@@ -263,6 +307,14 @@ function NewInvoiceContent() {
                   <input
                     value={l.unitPrice}
                     onChange={(e) => updateLine(i, { unitPrice: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="col-span-1">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Discount</label>
+                  <input
+                    value={l.discount}
+                    onChange={(e) => updateLine(i, { discount: e.target.value })}
                     className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
                   />
                 </div>

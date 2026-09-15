@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'POST') {
-    const { organizationId, customerId, projectId, issueDate, dueDate, currency, lines, taxTotal, taxRateId } = req.body || {}
+    const { organizationId, customerId, projectId, issueDate, dueDate, currency, lines, taxTotal, taxRateId, paymentTerms } = req.body || {}
     if (!organizationId || !customerId || !issueDate || !dueDate) {
       return res.status(400).json({ error: 'organizationId, customerId, issueDate and dueDate are required' })
     }
@@ -59,6 +59,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(400).json({ error: 'Invoice line product does not belong to this organization' })
         }
       }
+      if (l.discount != null && Number(l.discount) < 0) {
+        return res.status(400).json({ error: 'Line discount cannot be negative' })
+      }
     }
 
     let taxTotalFinal = taxTotal || '0'
@@ -92,11 +95,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           taxRateId: taxRateId || null,
           taxTotal: totals.taxTotal,
           total: totals.total,
+          paymentTerms: paymentTerms || null,
           lines: {
             create: lines.map((l: any, i: number) => ({
               description: l.description,
               quantity: l.quantity,
               unitPrice: l.unitPrice,
+              discount: l.discount || 0,
               amount: totals.lineAmounts[i],
               accountId: l.accountId,
               productId: l.productId || null,

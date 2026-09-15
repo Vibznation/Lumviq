@@ -92,6 +92,8 @@ export const FEATURE_CATALOG: FeatureDef[] = [
     ['online-payments', 'Online payment links'],
     ['sales-tax-tracking', 'Sales-tax tracking'],
     ['multi-currency-invoices', 'Multi-currency invoices'],
+    ['credit-notes', 'Credit notes'],
+    ['refunds', 'Customer refunds'],
   ]),
   ...features('expenses', [
     ['bill-management', 'Bill management'],
@@ -271,6 +273,8 @@ const ENTERPRISE_FEATURES = assertKeys([
   'projects.job-costing',
   'projects.staff-allocation',
   'expenses.vendor-credits',
+  'sales.credit-notes',
+  'sales.refunds',
   'team.approval-limits',
   'team.audit-history',
   'intelligence.transaction-suggestions',
@@ -408,6 +412,8 @@ export const FEATURE_LINKS: Record<string, string> = {
   'sales.payment-reminders': '/settings/workflows',
   'sales.sales-tax-tracking': '/settings/tax-rates',
   'sales.multi-currency-invoices': '/settings/currencies',
+  'sales.credit-notes': '/sales/credit-notes',
+  'sales.refunds': '/sales/refunds',
 
   'expenses.bill-management': '/purchasing/bills',
   'expenses.recurring-bills': '/sales/recurring',

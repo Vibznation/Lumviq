@@ -22,7 +22,7 @@ interface PortalInvoice {
   amountPaid: string
   lines: InvoiceLine[]
   customer: { name: string; email: string } | null
-  organization: { name: string }
+  organization: { name: string; logoUrl?: string | null; brandColor?: string | null }
   onlinePaymentAvailable: boolean
 }
 
@@ -58,9 +58,15 @@ export default function InvoicePortalPage() {
           {invoice && (
             <>
               <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h1 className="text-xl font-semibold text-slate-900">{invoice.organization.name}</h1>
-                  <p className="text-sm text-slate-500">Invoice {invoice.invoiceNumber}</p>
+                <div className="flex items-center gap-3">
+                  {invoice.organization.logoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={invoice.organization.logoUrl} alt={invoice.organization.name} className="h-10 w-10 object-contain rounded" />
+                  )}
+                  <div>
+                    <h1 className="text-xl font-semibold" style={{ color: invoice.organization.brandColor || undefined }}>{invoice.organization.name}</h1>
+                    <p className="text-sm text-slate-500">Invoice {invoice.invoiceNumber}</p>
+                  </div>
                 </div>
                 <span className="inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-medium capitalize text-slate-700">
                   {invoice.status.replace('_', ' ')}

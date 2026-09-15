@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { postInvoiceToLedger, computeInvoiceTotals } from '../src/lib/invoicing'
+import { postInvoiceToLedger, computeInvoiceTotals, postCreditNoteToLedger, applyCreditNoteToInvoice, postInvoiceRefundToLedger } from '../src/lib/invoicing'
 
 function makeTx({ receivableAccount, product }: { receivableAccount?: any; product?: any } = {}) {
   return {
@@ -37,6 +37,21 @@ describe('invoicing.ts computeInvoiceTotals', () => {
     expect(totals.subtotal).toBe('30.000000')
     expect(totals.taxTotal).toBe('0.000000')
     expect(totals.total).toBe('30.000000')
+  })
+
+  it('subtracts a per-line flat discount from that line before summing', () => {
+    const totals = computeInvoiceTotals([
+      { quantity: '2', unitPrice: '50', discount: '15' },
+      { quantity: '1', unitPrice: '25' },
+    ])
+    expect(totals.lineAmounts).toEqual(['85.000000', '25.000000'])
+    expect(totals.subtotal).toBe('110.000000')
+  })
+
+  it('clamps a line discount larger than the line amount at zero, never negative', () => {
+    const totals = computeInvoiceTotals([{ quantity: '1', unitPrice: '10', discount: '50' }])
+    expect(totals.lineAmounts).toEqual(['0.000000'])
+    expect(totals.subtotal).toBe('0.000000')
   })
 })
 
@@ -94,5 +109,112 @@ describe('invoicing.ts postInvoiceToLedger', () => {
     await expect(
       postInvoiceToLedger(tx as any, invoice, [{ accountId: 'rev1', description: 'x', amount: '1' }], 'actor1')
     ).rejects.toThrow()
+  })
+})
+
+function makeCreditNoteTx({ receivableAccount }: { receivableAccount?: any } = {}) {
+  return {
+    account: {
+      findFirst: vi.fn(async ({ where }: any) => (where.subtype === 'receivable' ? receivableAccount ?? null : null)),
+    },
+    journalEntry: {
+      findUnique: vi.fn(async () => null),
+      create: vi.fn(async ({ data }: any) => ({ id: 'je-cn1', lines: data.lines.create })),
+    },
+    creditNote: {
+      update: vi.fn(async ({ data }: any) => data),
+    },
+    invoice: {
+      update: vi.fn(async ({ data }: any) => data),
+    },
+    auditEvent: { create: vi.fn(async () => ({})) },
+  }
+}
+
+const creditNote = {
+  id: 'cn1', organizationId: 'org', creditNumber: 'CN-0001',
+  amount: '50.000000', remainingAmount: '50.000000', incomeAccountId: 'rev1', journalEntryId: null,
+}
+
+describe('invoicing.ts postCreditNoteToLedger', () => {
+  it('posts Debit income / Credit Accounts Receivable', async () => {
+    const tx = makeCreditNoteTx({ receivableAccount: { id: 'ar1' } })
+    const entry = await postCreditNoteToLedger(tx as any, creditNote, 'actor1')
+    expect(entry.lines).toEqual([
+      { accountId: 'rev1', amount: '50.000000', isDebit: true, description: 'Credit note CN-0001' },
+      { accountId: 'ar1', amount: '50.000000', isDebit: false, description: 'Credit note CN-0001' },
+    ])
+    expect(tx.creditNote.update).toHaveBeenCalledWith({ where: { id: 'cn1' }, data: { journalEntryId: 'je-cn1' } })
+  })
+
+  it('is idempotent when journalEntryId is already set', async () => {
+    const existing = { id: 'je-existing', lines: [] }
+    const tx = { journalEntry: { findUnique: vi.fn(async () => existing), create: vi.fn() } }
+    const entry = await postCreditNoteToLedger(tx as any, { ...creditNote, journalEntryId: 'je-existing' }, 'actor1')
+    expect(entry).toBe(existing)
+    expect(tx.journalEntry.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('invoicing.ts applyCreditNoteToInvoice', () => {
+  function makeApplyTx() {
+    return {
+      creditNote: { update: vi.fn(async ({ data }: any) => data) },
+      invoice: { update: vi.fn(async ({ data }: any) => ({ id: 'inv1', ...data })) },
+      auditEvent: { create: vi.fn(async () => ({})) },
+    }
+  }
+  const invoiceForApply = { id: 'inv1', total: '100.000000', amountPaid: '0.000000' }
+
+  it('reduces remaining credit and increases invoice amountPaid', async () => {
+    const tx = makeApplyTx()
+    const updated = await applyCreditNoteToInvoice(tx as any, creditNote, invoiceForApply, '30', 'actor1')
+    expect(tx.creditNote.update).toHaveBeenCalledWith({ where: { id: 'cn1' }, data: { remainingAmount: '20.000000' } })
+    expect(updated.amountPaid).toBe('30.000000')
+  })
+
+  it('rejects an amount exceeding the remaining credit balance', async () => {
+    const tx = makeApplyTx()
+    await expect(applyCreditNoteToInvoice(tx as any, creditNote, invoiceForApply, '999', 'actor1')).rejects.toThrow()
+  })
+
+  it('rejects an amount exceeding the invoice outstanding balance', async () => {
+    const tx = makeApplyTx()
+    const almostPaidInvoice = { id: 'inv1', total: '100.000000', amountPaid: '90.000000' }
+    await expect(applyCreditNoteToInvoice(tx as any, creditNote, almostPaidInvoice, '50', 'actor1')).rejects.toThrow()
+  })
+})
+
+describe('invoicing.ts postInvoiceRefundToLedger', () => {
+  function makeRefundTx({ receivableAccount }: { receivableAccount?: any } = {}) {
+    return {
+      account: {
+        findFirst: vi.fn(async ({ where }: any) => (where.subtype === 'receivable' ? receivableAccount ?? null : null)),
+      },
+      journalEntry: {
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async ({ data }: any) => ({ id: 'je-refund1', lines: data.lines.create })),
+      },
+      invoiceRefund: { update: vi.fn(async ({ data }: any) => data) },
+      auditEvent: { create: vi.fn(async () => ({})) },
+    }
+  }
+  const refund = { id: 'refund1', organizationId: 'org', amount: '25.000000', depositAccountId: 'bank1', journalEntryId: null }
+
+  it('posts Debit Accounts Receivable / Credit deposit account', async () => {
+    const tx = makeRefundTx({ receivableAccount: { id: 'ar1' } })
+    const entry = await postInvoiceRefundToLedger(tx as any, refund, 'INV-0001', 'actor1')
+    expect(entry.lines).toEqual([
+      { accountId: 'ar1', amount: '25.000000', isDebit: true, description: 'Refund for invoice INV-0001' },
+      { accountId: 'bank1', amount: '25.000000', isDebit: false, description: 'Refund for invoice INV-0001' },
+    ])
+  })
+
+  it('is idempotent when journalEntryId is already set', async () => {
+    const existing = { id: 'je-existing', lines: [] }
+    const tx = { journalEntry: { findUnique: vi.fn(async () => existing), create: vi.fn() } }
+    const entry = await postInvoiceRefundToLedger(tx as any, { ...refund, journalEntryId: 'je-existing' }, 'INV-0001', 'actor1')
+    expect(entry).toBe(existing)
+    expect(tx.journalEntry.create).not.toHaveBeenCalled()
   })
 })

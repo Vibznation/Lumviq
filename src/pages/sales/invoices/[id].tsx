@@ -6,7 +6,7 @@ import DocumentsPanel from '../../../components/DocumentsPanel'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; subtype: string | null }
-type InvoiceLine = { id: string; description: string; quantity: string; unitPrice: string; amount: string; account: { code: string; name: string } }
+type InvoiceLine = { id: string; description: string; quantity: string; unitPrice: string; discount: string; amount: string; account: { code: string; name: string } }
 type Payment = { id: string; amount: string; paymentDate: string; method: string | null }
 type Invoice = {
   id: string
@@ -14,6 +14,7 @@ type Invoice = {
   status: string
   issueDate: string
   dueDate: string
+  paymentTerms: string | null
   subtotal: string
   taxTotal: string
   total: string
@@ -38,6 +39,7 @@ function InvoiceDetailContent() {
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [depositAccountId, setDepositAccountId] = useState('')
+  const [emailStatus, setEmailStatus] = useState<string | null>(null)
 
   async function load() {
     if (!id) return
@@ -66,11 +68,24 @@ function InvoiceDetailContent() {
     if (!invoice) return
     setBusy(true)
     setError(null)
+    setEmailStatus(null)
     try {
       const res = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST', headers: authHeaders(token) })
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Could not send invoice')
+      }
+      const body = await res.json()
+      if (body.emailResult) {
+        setEmailStatus(
+          body.emailResult.status === 'sent'
+            ? `Emailed to ${invoice.customer.email}.`
+            : body.emailResult.status === 'logged_only'
+            ? 'Invoice marked sent. Email delivery is not configured (SMTP), so no email was actually sent — it was only logged.'
+            : `Invoice marked sent, but email delivery failed: ${body.emailResult.error}`
+        )
+      } else if (!invoice.customer.email) {
+        setEmailStatus('Invoice marked sent. This customer has no email on file, so no email was sent.')
       }
       await load()
     } catch (err: any) {
@@ -124,6 +139,18 @@ function InvoiceDetailContent() {
     }
   }
 
+  async function handleDownloadPdf() {
+    if (!invoice) return
+    const res = await fetch(`/api/invoices/${invoice.id}/pdf`, { headers: authHeaders(token) })
+    if (!res.ok) {
+      setError('Could not generate PDF')
+      return
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    window.open(url, '_blank')
+  }
+
   if (!invoice) return <p className="text-sm text-gray-500">Loading…</p>
 
   const balance = Number(invoice.total) - Number(invoice.amountPaid)
@@ -146,12 +173,21 @@ function InvoiceDetailContent() {
         </div>
       )}
 
+      {emailStatus && (
+        <div className="mb-4 text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+          {emailStatus}
+        </div>
+      )}
+
       <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-5 mb-4">
         <div className="flex items-center justify-between mb-4">
           <span className="inline-block rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-midnight-800 dark:text-gray-300">
             {invoice.status.replace('_', ' ')}
           </span>
           <div className="flex gap-2">
+            <button onClick={handleDownloadPdf} className="rounded-md border border-gray-300 dark:border-midnight-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-midnight-800">
+              Download PDF
+            </button>
             {invoice.status === 'draft' && (
               <button onClick={handleSend} disabled={busy} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
                 Send invoice
@@ -165,6 +201,10 @@ function InvoiceDetailContent() {
           </div>
         </div>
 
+        {invoice.paymentTerms && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Terms: {invoice.paymentTerms.replace(/_/g, ' ')}</p>
+        )}
+
         <table className="w-full text-sm mb-4">
           <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
             <tr>
@@ -172,6 +212,7 @@ function InvoiceDetailContent() {
               <th className="py-1">Account</th>
               <th className="py-1 text-right">Qty</th>
               <th className="py-1 text-right">Unit price</th>
+              <th className="py-1 text-right">Discount</th>
               <th className="py-1 text-right">Amount</th>
             </tr>
           </thead>
@@ -182,6 +223,7 @@ function InvoiceDetailContent() {
                 <td className="py-1.5 text-gray-500 dark:text-gray-400">{l.account.code} {l.account.name}</td>
                 <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">{l.quantity}</td>
                 <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">{currency(l.unitPrice)}</td>
+                <td className="py-1.5 text-right text-gray-500 dark:text-gray-400">{Number(l.discount) > 0 ? currency(l.discount) : '—'}</td>
                 <td className="py-1.5 text-right text-gray-900 dark:text-gray-100">{currency(l.amount)}</td>
               </tr>
             ))}

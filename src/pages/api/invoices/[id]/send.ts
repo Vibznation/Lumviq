@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../../../server/prisma'
 import { requireUserFromRequest, userHasMembership } from '../../../../lib/authorization'
 import { postInvoiceToLedger } from '../../../../lib/invoicing'
+import { createInvoicePortalToken } from '../../../../lib/portal-tokens'
+import { sendEmail } from '../../../../lib/integrations/email'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -9,14 +11,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!user) return res.status(401).json({ error: 'Unauthorized' })
 
   const id = req.query.id as string
-  const invoice = await prisma.invoice.findUnique({ where: { id }, include: { lines: true } })
+  const invoice = await prisma.invoice.findUnique({ where: { id }, include: { lines: true, customer: true, organization: true } })
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' })
   if (!(await userHasMembership(user.id, invoice.organizationId))) return res.status(403).json({ error: 'Forbidden' })
   if (invoice.status !== 'draft') return res.status(400).json({ error: 'Only draft invoices can be sent' })
   if (invoice.voidedAt) return res.status(400).json({ error: 'Invoice has been voided' })
 
   try {
-    const updated = await prisma.$transaction(async (tx) => {
+    const { updated, portalUrl } = await prisma.$transaction(async (tx) => {
       const entry = await postInvoiceToLedger(
         tx,
         invoice,
@@ -29,14 +31,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })),
         user.id
       )
-      return tx.invoice.update({
+      const updatedInvoice = await tx.invoice.update({
         where: { id: invoice.id },
         data: { status: 'sent', journalEntryId: entry.id },
         include: { lines: true, customer: true, payments: true },
       })
+      const portalToken = await createInvoicePortalToken(tx, invoice.id)
+      const appUrl = process.env.APP_URL || 'http://localhost:3000'
+      return { updated: updatedInvoice, portalUrl: `${appUrl}/portal/invoices/${portalToken.token}` }
     })
-    return res.status(200).json(updated)
+
+    let emailResult: { provider: string; status: string; error?: string } | null = null
+    if (invoice.customer.email) {
+      emailResult = await sendEmail({
+        organizationId: invoice.organizationId,
+        to: invoice.customer.email,
+        subject: `Invoice ${invoice.invoiceNumber} from ${invoice.organization.name}`,
+        body:
+          `Hi ${invoice.customer.name},\n\n` +
+          `${invoice.organization.name} has sent you invoice ${invoice.invoiceNumber} for ${invoice.total} ${invoice.currency}, due ${new Date(invoice.dueDate).toDateString()}.\n\n` +
+          `View and pay online: ${portalUrl}\n\n` +
+          `Thank you for your business.`,
+      })
+    }
+
+    return res.status(200).json({ ...updated, emailResult })
   } catch (err: any) {
     return res.status(400).json({ error: err.message })
   }
 }
+

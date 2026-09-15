@@ -68,6 +68,15 @@ function InvoicesContent() {
           <Link href="/sales/customers" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
             Customers →
           </Link>
+          <Link href="/sales/products" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Products →
+          </Link>
+          <Link href="/sales/credit-notes" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Credit notes →
+          </Link>
+          <Link href="/sales/refunds" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Refunds →
+          </Link>
           <Link href="/sales/invoices/new" className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
             New invoice
           </Link>

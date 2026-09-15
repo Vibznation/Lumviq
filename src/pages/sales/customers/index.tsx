@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import ProtectedRoute from '../../components/ProtectedRoute'
-import { authHeaders, useAuth } from '../../lib/auth-context'
+import ProtectedRoute from '../../../components/ProtectedRoute'
+import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Customer = {
   id: string
   name: string
   email: string | null
   phone: string | null
+  billingAddress: string | null
 }
 
 function CustomersContent() {
@@ -16,7 +17,7 @@ function CustomersContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', phone: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', billingAddress: '' })
   const [submitting, setSubmitting] = useState(false)
 
   async function loadCustomers() {
@@ -54,7 +55,7 @@ function CustomersContent() {
         const j = await res.json().catch(() => ({}))
         throw new Error(j.error || 'Could not create customer')
       }
-      setForm({ name: '', email: '', phone: '' })
+      setForm({ name: '', email: '', phone: '', billingAddress: '' })
       setShowForm(false)
       await loadCustomers()
     } catch (err: any) {
@@ -74,6 +75,9 @@ function CustomersContent() {
         <div className="flex items-center gap-3">
           <Link href="/sales/invoices" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
             View invoices →
+          </Link>
+          <Link href="/sales/products" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Products &amp; services →
           </Link>
           <button
             onClick={() => setShowForm((s) => !s)}
@@ -121,6 +125,16 @@ function CustomersContent() {
               className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
             />
           </div>
+          <div>
+            <label htmlFor="billingAddress" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Billing address</label>
+            <textarea
+              id="billingAddress"
+              value={form.billingAddress}
+              onChange={(e) => setForm((f) => ({ ...f, billingAddress: e.target.value }))}
+              rows={2}
+              className="mt-1 w-full rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm"
+            />
+          </div>
           <button type="submit" disabled={submitting} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
             {submitting ? 'Saving…' : 'Save customer'}
           </button>
@@ -139,6 +153,7 @@ function CustomersContent() {
                 <th className="px-4 py-2">Name</th>
                 <th className="px-4 py-2">Email</th>
                 <th className="px-4 py-2">Phone</th>
+                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -147,6 +162,11 @@ function CustomersContent() {
                   <td className="px-4 py-2 text-gray-900 dark:text-gray-100">{c.name}</td>
                   <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{c.email || '—'}</td>
                   <td className="px-4 py-2 text-gray-500 dark:text-gray-400">{c.phone || '—'}</td>
+                  <td className="px-4 py-2 text-right">
+                    <Link href={`/sales/customers/${c.id}`} className="text-teal-700 dark:text-teal-400 hover:underline">
+                      View →
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

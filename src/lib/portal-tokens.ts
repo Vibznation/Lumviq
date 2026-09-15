@@ -21,7 +21,7 @@ export async function resolveInvoicePortalToken(tx: any, token: string) {
   if (record.expiresAt < new Date()) return null
   const invoice = await tx.invoice.findUnique({
     where: { id: record.invoiceId },
-    include: { lines: true, customer: true, organization: { select: { id: true, name: true } } },
+    include: { lines: true, customer: true, organization: { select: { id: true, name: true, logoUrl: true, brandColor: true } } },
   })
   return invoice
 }
