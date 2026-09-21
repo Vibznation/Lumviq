@@ -13,20 +13,36 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!loading && token) router.replace('/dashboard')
+    if (!loading && token) {
+      router.replace('/dashboard').catch(() => {
+        window.location.href = '/dashboard'
+      })
+    }
   }, [loading, token, router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
-    const result = await login(email.trim(), password)
-    setSubmitting(false)
-    if (!result.ok) {
-      setError(result.error || 'Could not sign in')
-      return
+
+    try {
+      const result = await login(email.trim(), password)
+      if (!result.ok) {
+        setError(result.error || 'Invalid email or password')
+        setSubmitting(false)
+        return
+      }
+      // Navigate to dashboard cleanly
+      try {
+        await router.push('/dashboard')
+      } catch {
+        window.location.href = '/dashboard'
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Authentication error occurred')
+    } finally {
+      setSubmitting(false)
     }
-    router.push('/dashboard')
   }
 
   return (

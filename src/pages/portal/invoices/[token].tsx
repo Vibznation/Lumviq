@@ -32,8 +32,11 @@ export default function InvoicePortalPage() {
   const [invoice, setInvoice] = useState<PortalInvoice | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [paying, setPaying] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
 
-  useEffect(() => {
+  const loadInvoice = () => {
     if (!token) return
     setLoading(true)
     fetch(`/api/portal/invoices/${token}`)
@@ -44,7 +47,34 @@ export default function InvoicePortalPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadInvoice()
   }, [token])
+
+  async function handlePay() {
+    if (!token) return
+    setPaying(true)
+    setPaymentError(null)
+
+    try {
+      const res = await fetch(`/api/portal/invoices/${token}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Payment failed')
+      }
+      setPaymentSuccess(true)
+      loadInvoice()
+    } catch (err: any) {
+      setPaymentError(err?.message || 'Payment processing failed')
+    } finally {
+      setPaying(false)
+    }
+  }
 
   return (
     <>
@@ -132,7 +162,38 @@ export default function InvoicePortalPage() {
                 </div>
               </div>
 
-              {!invoice.onlinePaymentAvailable && (
+              {invoice.onlinePaymentAvailable && invoice.status !== 'paid' && (
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  {paymentSuccess ? (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800 text-center">
+                      <p className="font-semibold text-base">Payment Succeeded!</p>
+                      <p className="text-sm mt-1 text-emerald-700">Thank you! Your payment has been received and posted to this invoice.</p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-semibold text-slate-900 text-sm">Pay Invoice Online</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Secure card or bank payment processed directly.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handlePay}
+                        disabled={paying}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm transition shadow-sm disabled:opacity-60 shrink-0"
+                      >
+                        {paying ? 'Processing Payment…' : `Pay ${invoice.currency} ${(parseFloat(invoice.total) - parseFloat(invoice.amountPaid)).toFixed(2)}`}
+                      </button>
+                    </div>
+                  )}
+                  {paymentError && (
+                    <div className="mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                      {paymentError}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!invoice.onlinePaymentAvailable && invoice.status !== 'paid' && (
                 <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                   Online payment isn&apos;t available for this invoice yet. Please contact {invoice.organization.name} directly to arrange payment.
                 </div>

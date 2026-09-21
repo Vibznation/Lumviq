@@ -1,19 +1,7 @@
-import { promises as fs } from 'fs'
-import path from 'path'
 import { randomUUID } from 'crypto'
 import prisma from '../server/prisma'
+import { getStorageProvider } from './storage'
 
-/**
- * Document storage. Files are stored on local disk under `/uploads`
- * (outside `src/`), keyed by organization, with metadata in the
- * `documents` table. There is no cloud-storage provider configured — see
- * src/lib/integrations/ — so this is local development/demo storage only,
- * not durable production storage (files are lost if the disk/container is
- * recreated). Uploads are accepted as base64-encoded JSON rather than
- * multipart form data to avoid adding a new dependency; see
- * src/pages/api/documents/index.ts.
- */
-const UPLOADS_ROOT = path.join(process.cwd(), 'uploads')
 const MAX_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
 
 export async function saveDocument(params: {
@@ -31,12 +19,10 @@ export async function saveDocument(params: {
 
   const safeName = params.fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
   const storedName = `${randomUUID()}-${safeName}`
-  const orgDir = path.join(UPLOADS_ROOT, params.organizationId)
-  await fs.mkdir(orgDir, { recursive: true })
-  const fullPath = path.join(orgDir, storedName)
-  await fs.writeFile(fullPath, buffer)
+  const storagePath = `${params.organizationId}/${storedName}`
 
-  const storagePath = path.join(params.organizationId, storedName)
+  const storage = getStorageProvider()
+  await storage.put(storagePath, buffer, params.mimeType)
 
   return prisma.document.create({
     data: {
@@ -60,12 +46,12 @@ export async function listDocuments(organizationId: string, relatedType?: string
 }
 
 export async function readDocumentFile(doc: { storagePath: string }) {
-  const fullPath = path.join(UPLOADS_ROOT, doc.storagePath)
-  return fs.readFile(fullPath)
+  const storage = getStorageProvider()
+  return storage.get(doc.storagePath)
 }
 
 export async function deleteDocument(doc: { id: string; storagePath: string }) {
-  const fullPath = path.join(UPLOADS_ROOT, doc.storagePath)
-  await fs.unlink(fullPath).catch(() => undefined)
+  const storage = getStorageProvider()
+  await storage.delete(doc.storagePath)
   await prisma.document.delete({ where: { id: doc.id } })
 }

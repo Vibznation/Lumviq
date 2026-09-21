@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { recordPurchaseStockMovement, recordSaleStockMovement, recordAdjustmentStockMovement } from '../src/lib/inventory'
+import {
+  recordPurchaseStockMovement,
+  recordSaleStockMovement,
+  recordAdjustmentStockMovement,
+  calculateFifoCost,
+  calculateLifoCost,
+} from '../src/lib/inventory'
 
 function makeTx(product: any) {
   return {
@@ -13,7 +19,29 @@ function makeTx(product: any) {
   }
 }
 
-describe('inventory.ts average-cost stock movements', () => {
+describe('inventory.ts average-cost, FIFO and LIFO stock movements', () => {
+  it('calculateFifoCost consumes earliest inventory layers first', () => {
+    const layers = [
+      { quantity: 10, unitCost: 5 }, // Layer 1 (earliest)
+      { quantity: 20, unitCost: 8 }, // Layer 2
+    ]
+    // Sell 15 units -> 10 @ $5 ($50) + 5 @ $8 ($40) = $90 total
+    const result = calculateFifoCost(layers, 15)
+    expect(result.totalCost).toBe(90)
+    expect(result.averageUnitCost).toBe(6)
+  })
+
+  it('calculateLifoCost consumes most recent inventory layers first', () => {
+    const layers = [
+      { quantity: 10, unitCost: 5 }, // Layer 1 (earliest)
+      { quantity: 20, unitCost: 8 }, // Layer 2 (most recent)
+    ]
+    // Sell 15 units under LIFO -> 15 @ $8 ($120) = $120 total
+    const result = calculateLifoCost(layers, 15)
+    expect(result.totalCost).toBe(120)
+    expect(result.averageUnitCost).toBe(8)
+  })
+
   it('recordPurchaseStockMovement computes the weighted average cost', async () => {
     const product = { id: 'p1', organizationId: 'org', quantityOnHand: '10', costPrice: '5' }
     const tx = makeTx(product)
