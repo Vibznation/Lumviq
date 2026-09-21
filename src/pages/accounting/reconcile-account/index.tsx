@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string; subtype: string | null }
@@ -96,37 +97,27 @@ function ReconcileAccountContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Account reconciliation</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/accounting/journal-entries" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Journal entries
-          </Link>
-          <Link href="/accounting/general-ledger" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            General ledger
-          </Link>
-          <Link href="/accounting/chart-of-accounts" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Chart of accounts
-          </Link>
-          <Link href="/accounting/close-checklist" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Close checklist
-          </Link>
-          <Link href="/accounting/fixed-assets" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Fixed assets
-          </Link>
-          <Link href="/accounting/loans" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Loans
-          </Link>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
-          >
-            {showForm ? 'Cancel' : 'Reconcile an account'}
-          </button>
-        </div>
+      <PageHeader
+        icon="⚖️"
+        eyebrow="Accounting"
+        title="Account Reconciliation"
+        subtitle={currentOrg?.name}
+        quickLinks={[
+          { label: 'Journal Entries', href: '/accounting/journal-entries', icon: '📒' },
+          { label: 'General Ledger', href: '/accounting/general-ledger', icon: '📚' },
+          { label: 'Chart of Accounts', href: '/accounting/chart-of-accounts', icon: '⚖️' },
+          { label: 'Close Checklist', href: '/accounting/close-checklist', icon: '✅' },
+          { label: 'Fixed Assets', href: '/accounting/fixed-assets', icon: '🏢' },
+          { label: 'Loans', href: '/accounting/loans', icon: '🏦' },
+        ]}
+      />
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors"
+        >
+          {showForm ? 'Cancel' : '+ Reconcile an Account'}
+        </button>
       </div>
 
       {error && (

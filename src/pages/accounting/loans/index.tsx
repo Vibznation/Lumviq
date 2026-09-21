@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string; subtype: string | null }
@@ -104,28 +105,24 @@ function LoansContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Loans</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/accounting/reconcile-account" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Reconcile an account
-          </Link>
-          <Link href="/accounting/close-checklist" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Close checklist
-          </Link>
-          <Link href="/accounting/fixed-assets" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Fixed assets
-          </Link>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
-          >
-            {showForm ? 'Cancel' : 'New loan'}
-          </button>
-        </div>
+      <PageHeader
+        icon="🏦"
+        eyebrow="Accounting"
+        title="Loans"
+        subtitle={currentOrg?.name}
+        quickLinks={[
+          { label: 'Reconcile Account', href: '/accounting/reconcile-account', icon: '⚖️' },
+          { label: 'Close Checklist', href: '/accounting/close-checklist', icon: '✅' },
+          { label: 'Fixed Assets', href: '/accounting/fixed-assets', icon: '🏢' },
+        ]}
+      />
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors"
+        >
+          {showForm ? 'Cancel' : '+ New Loan'}
+        </button>
       </div>
 
       {error && (

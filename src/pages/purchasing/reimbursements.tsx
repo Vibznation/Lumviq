@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string; subtype: string }
@@ -103,17 +104,17 @@ function ReimbursementsContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Reimbursements</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/purchasing/vendor-credits" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">Vendor credits →</Link>
-          <button onClick={() => setShowForm((s) => !s)} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
-            {showForm ? 'Cancel' : 'New request'}
-          </button>
-        </div>
+      <PageHeader
+        icon="💰"
+        eyebrow="Purchasing"
+        title="Reimbursements"
+        subtitle={currentOrg?.name}
+        quickLinks={[{ label: 'Vendor Credits', href: '/purchasing/vendor-credits', icon: '↩️' }]}
+      />
+      <div className="mb-6 flex justify-end">
+        <button onClick={() => setShowForm((s) => !s)} className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors">
+          {showForm ? 'Cancel' : '+ New Request'}
+        </button>
       </div>
 
       {error && <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Papa from 'papaparse'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type BankAccount = { id: string; name: string }
@@ -99,8 +100,7 @@ function BankImportContent() {
 
   return (
     <div className="max-w-xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Bank CSV Import</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
+      <PageHeader icon="🏦" eyebrow="Banking" title="Bank CSV Import" subtitle={currentOrg?.name} quickLinks={[{ label: 'Reconcile', href: '/banking/reconcile', icon: '⚖️' }]} />
 
       <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 mb-4">
         <label htmlFor="bankAccount" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Bank account</label>

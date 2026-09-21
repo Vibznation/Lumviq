@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import ProtectedRoute from '../components/ProtectedRoute'
+import PageHeader from '../components/PageHeader'
 import { authHeaders, useAuth } from '../lib/auth-context'
 
 type Insight = { type: string; label: string; severity: 'info' | 'warning'; summary: string; basis: any }
@@ -66,10 +67,7 @@ function IntelligenceContent() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Intelligence</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-      </div>
+      <PageHeader icon="✨" eyebrow="Intelligence" title="Intelligence" subtitle={currentOrg?.name} />
 
       <div className="mb-6 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-midnight-800 border border-gray-200 dark:border-midnight-700 rounded-md px-3 py-2">
         These insights and chat answers are computed with deterministic, rule-based calculations directly on your

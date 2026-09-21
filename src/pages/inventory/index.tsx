@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string; subtype: string | null }
@@ -154,22 +155,20 @@ function InventoryContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Products & Inventory</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name} — average cost valuation</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/reports?tab=Product+Profitability" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Product profitability →
-          </Link>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700"
-          >
-            {showForm ? 'Cancel' : 'New product'}
-          </button>
-        </div>
+      <PageHeader
+        icon="📦"
+        eyebrow="Inventory"
+        title="Products & Inventory"
+        subtitle={`${currentOrg?.name || ''} — average cost valuation`}
+        quickLinks={[{ label: 'Product Profitability', href: '/reports?tab=Product+Profitability', icon: '📈' }]}
+      />
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors"
+        >
+          {showForm ? 'Cancel' : '+ New Product'}
+        </button>
       </div>
 
       {error && (

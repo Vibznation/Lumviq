@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type TrialBalanceRow = { accountId: string; code: string; name: string; type: string; debitBalance: number; creditBalance: number }
@@ -180,10 +181,7 @@ function ReportsContent() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Reports</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name} — figures computed directly from your ledger</p>
-      </div>
+      <PageHeader icon="📊" eyebrow="Reports" title="Reports" subtitle={`${currentOrg?.name || ''} — figures computed directly from your ledger`} />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

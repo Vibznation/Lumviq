@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 function BrandingContent() {
@@ -51,10 +52,7 @@ function BrandingContent() {
 
   return (
     <div className="max-w-md">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Branding</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-        Shown on invoice PDFs and the customer payment portal.
-      </p>
+      <PageHeader icon="🎨" eyebrow="Settings" title="Branding" subtitle="Shown on invoice PDFs and the customer payment portal." />
       <Link href="/settings/organization" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">← Back to organization settings</Link>
 
       {error && (

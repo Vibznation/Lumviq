@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type DimensionValue = { id: string; name: string }
@@ -81,10 +82,7 @@ function DimensionsContent() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Dimensions</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        {currentOrg?.name} — tag manual journal entries by department, location or program
-      </p>
+      <PageHeader icon="🏷️" eyebrow="Settings" title="Dimensions" subtitle={`${currentOrg?.name || ''} — tag manual journal entries by department, location or program`} />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

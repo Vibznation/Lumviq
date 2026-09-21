@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Permission = { id: string; name: string; description: string | null }
@@ -105,13 +106,10 @@ function RolesContent() {
       <div className="mb-4">
         <Link href="/settings/organization" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">← Back to organization settings</Link>
       </div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Custom roles</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name} — define roles with specific permission sets</p>
-        </div>
-        <button onClick={() => setShowForm((s) => !s)} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
-          {showForm ? 'Cancel' : 'New role'}
+      <PageHeader icon="👥" eyebrow="Settings" title="Custom Roles" subtitle={`${currentOrg?.name || ''} — define roles with specific permission sets`} />
+      <div className="mb-6 flex justify-end">
+        <button onClick={() => setShowForm((s) => !s)} className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors">
+          {showForm ? 'Cancel' : '+ New Role'}
         </button>
       </div>
 

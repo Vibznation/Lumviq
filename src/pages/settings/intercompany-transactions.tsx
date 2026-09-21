@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type LinkedOrg = { id: string; name: string }
@@ -136,23 +137,21 @@ function IntercompanyTransactionsContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Intercompany transactions</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/settings/multi-entity" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Multi-entity management
-          </Link>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            disabled={linkedOrgs.length === 0}
-            className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
-          >
-            {showForm ? 'Cancel' : 'New transaction'}
-          </button>
-        </div>
+      <PageHeader
+        icon="🔄"
+        eyebrow="Settings"
+        title="Intercompany Transactions"
+        subtitle={currentOrg?.name}
+        quickLinks={[{ label: 'Multi-Entity Management', href: '/settings/multi-entity', icon: '🏢' }]}
+      />
+      <div className="mb-6 flex justify-end">
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          disabled={linkedOrgs.length === 0}
+          className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
+        >
+          {showForm ? 'Cancel' : 'New transaction'}
+        </button>
       </div>
 
       {error && (

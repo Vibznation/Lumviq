@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type TaxRate = { id: string; name: string; rate: string; isDefault: boolean }
@@ -58,8 +59,7 @@ function TaxRatesContent() {
 
   return (
     <div className="max-w-lg">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Tax rates</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name} — used on invoice and bill line items</p>
+      <PageHeader icon="🧾" eyebrow="Settings" title="Tax Rates" subtitle={`${currentOrg?.name || ''} — used on invoice and bill line items`} />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

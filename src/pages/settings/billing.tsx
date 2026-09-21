@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 import { PLANS, ADD_ONS, BillingCycle, planMonthlyEquivalent } from '../../lib/plans'
 
@@ -65,8 +66,7 @@ function BillingSettingsContent() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Billing</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
+      <PageHeader icon="💳" eyebrow="Settings" title="Billing" subtitle={currentOrg?.name} />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

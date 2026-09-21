@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Member = {
@@ -68,27 +69,30 @@ function OrganizationSettingsContent() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Organization settings</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{currentOrg?.name}</p>
-
-      <div className="mb-6 flex gap-4 text-sm flex-wrap">
-        <Link href="/settings/multi-entity" className="text-teal-700 dark:text-teal-400 hover:underline">Multi-entity management</Link>
-        <Link href="/settings/intercompany-transactions" className="text-teal-700 dark:text-teal-400 hover:underline">Intercompany transactions</Link>
-        <Link href="/settings/tax-rates" className="text-teal-700 dark:text-teal-400 hover:underline">Tax rates</Link>
-        <Link href="/settings/branding" className="text-teal-700 dark:text-teal-400 hover:underline">Branding</Link>
-        <Link href="/settings/integrations" className="text-teal-700 dark:text-teal-400 hover:underline">Integrations</Link>
-        <Link href="/settings/billing" className="text-teal-700 dark:text-teal-400 hover:underline">Billing</Link>
-        <Link href="/settings/dimensions" className="text-teal-700 dark:text-teal-400 hover:underline">Dimensions</Link>
-        <Link href="/settings/currencies" className="text-teal-700 dark:text-teal-400 hover:underline">Currencies</Link>
-        <Link href="/settings/funds" className="text-teal-700 dark:text-teal-400 hover:underline">Funds &amp; grants</Link>
-        <Link href="/settings/contractors" className="text-teal-700 dark:text-teal-400 hover:underline">Contractors</Link>
-        <Link href="/settings/webhooks" className="text-teal-700 dark:text-teal-400 hover:underline">Webhooks</Link>
-        <Link href="/settings/roles" className="text-teal-700 dark:text-teal-400 hover:underline">Custom roles</Link>
-        <Link href="/settings/custom-fields" className="text-teal-700 dark:text-teal-400 hover:underline">Custom fields</Link>
-        <Link href="/settings/workflows" className="text-teal-700 dark:text-teal-400 hover:underline">Workflow automation</Link>
-        <Link href="/settings/approval-thresholds" className="text-teal-700 dark:text-teal-400 hover:underline">Approval thresholds</Link>
-        <Link href="/settings/audit-log" className="text-teal-700 dark:text-teal-400 hover:underline">Audit history</Link>
-      </div>
+      <PageHeader
+        icon="⚙️"
+        eyebrow="Settings"
+        title="Organization Settings"
+        subtitle={currentOrg?.name}
+        quickLinks={[
+          { label: 'Multi-Entity', href: '/settings/multi-entity', icon: '🏢' },
+          { label: 'Intercompany', href: '/settings/intercompany-transactions', icon: '🔄' },
+          { label: 'Tax Rates', href: '/settings/tax-rates', icon: '🧾' },
+          { label: 'Branding', href: '/settings/branding', icon: '🎨' },
+          { label: 'Integrations', href: '/settings/integrations', icon: '🔌' },
+          { label: 'Billing', href: '/settings/billing', icon: '💳' },
+          { label: 'Dimensions', href: '/settings/dimensions', icon: '🏷️' },
+          { label: 'Currencies', href: '/settings/currencies', icon: '💱' },
+          { label: 'Funds & Grants', href: '/settings/funds', icon: '🎁' },
+          { label: 'Contractors', href: '/settings/contractors', icon: '🧑\u200d💼' },
+          { label: 'Webhooks', href: '/settings/webhooks', icon: '🔗' },
+          { label: 'Custom Roles', href: '/settings/roles', icon: '👥' },
+          { label: 'Custom Fields', href: '/settings/custom-fields', icon: '🧱' },
+          { label: 'Workflows', href: '/settings/workflows', icon: '🤖' },
+          { label: 'Approval Thresholds', href: '/settings/approval-thresholds', icon: '🚦' },
+          { label: 'Audit History', href: '/settings/audit-log', icon: '📜' },
+        ]}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

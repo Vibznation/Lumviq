@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type BankAccount = { id: string; name: string }
@@ -63,8 +64,7 @@ function ReconcileIndexContent() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Reconciliation Sessions</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
+      <PageHeader icon="⚖️" eyebrow="Banking" title="Reconciliation Sessions" subtitle={currentOrg?.name} quickLinks={[{ label: 'Bank Import', href: '/banking/import', icon: '🏦' }]} />
 
       <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4 mb-6 flex flex-wrap items-end gap-3">
         <div>

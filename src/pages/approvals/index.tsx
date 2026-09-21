@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Approval = {
@@ -73,10 +74,12 @@ function ApprovalsContent() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Approval Center</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        {currentOrg?.name} — sensitive actions above a threshold wait here for sign-off before anything posts to the ledger.
-      </p>
+      <PageHeader
+        icon="✅"
+        eyebrow="Approvals"
+        title="Approval Center"
+        subtitle={`${currentOrg?.name || ''} — sensitive actions above a threshold wait here for sign-off before anything posts to the ledger.`}
+      />
 
       <div className="mb-4 flex gap-2 text-sm">
         <button

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 const RESOURCE_TYPES = [
@@ -74,8 +75,12 @@ function ApprovalThresholdsContent() {
       <div className="mb-4">
         <Link href="/settings/organization" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">← Back to organization settings</Link>
       </div>
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Approval thresholds</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name} — payments above these amounts require approval. Only an owner or admin can change these.</p>
+      <PageHeader
+        icon="🚦"
+        eyebrow="Settings"
+        title="Approval Thresholds"
+        subtitle={`${currentOrg?.name || ''} — payments above these amounts require approval. Only an owner or admin can change these.`}
+      />
 
       {error && <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
       {saved && <div className="mb-4 text-sm text-teal-700 bg-teal-50 border border-teal-200 rounded-md px-3 py-2">Saved.</div>}

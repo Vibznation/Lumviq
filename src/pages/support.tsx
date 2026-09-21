@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../components/ProtectedRoute'
+import PageHeader from '../components/PageHeader'
 import { authHeaders, useAuth } from '../lib/auth-context'
 
 type Ticket = { id: string; subject: string; message: string; status: string; priority: string; createdAt: string }
@@ -97,10 +98,7 @@ function SupportContent() {
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Support</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}{tierLabel ? ` — ${tierLabel}` : ''}</p>
-      </div>
+      <PageHeader icon="💬" eyebrow="Support" title="Support" subtitle={`${currentOrg?.name || ''}${tierLabel ? ` — ${tierLabel}` : ''}`} />
 
       <div className="mb-6 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-midnight-800 border border-gray-200 dark:border-midnight-700 rounded-md px-3 py-2">
         This is an in-app ticket log, not a live chat — there is no external ticketing system integration. Your

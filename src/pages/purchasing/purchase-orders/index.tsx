@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type PurchaseOrder = { id: string; poNumber: string; status: string; total: string; expectedDate: string | null; vendor: { name: string } }
@@ -62,17 +63,17 @@ function PurchaseOrdersContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Purchase Orders</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/purchasing/vendor-credits" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">Vendor credits →</Link>
-          <Link href="/purchasing/reimbursements" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">Reimbursements →</Link>
-          <Link href="/purchasing/purchase-orders/new" className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">New PO</Link>
-        </div>
-      </div>
+      <PageHeader
+        icon="📋"
+        eyebrow="Purchasing"
+        title="Purchase Orders"
+        subtitle={currentOrg?.name}
+        actions={[{ label: '+ New PO', href: '/purchasing/purchase-orders/new' }]}
+        quickLinks={[
+          { label: 'Vendor Credits', href: '/purchasing/vendor-credits', icon: '↩️' },
+          { label: 'Reimbursements', href: '/purchasing/reimbursements', icon: '💰' },
+        ]}
+      />
 
       {error && <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}
 

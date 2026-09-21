@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Account = { id: string; code: string; name: string; type: string }
@@ -245,17 +246,14 @@ function PlanningContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Budgeting & Planning</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        {(tab === 'Budget vs Actual' || tab === 'Scenarios') && (
+      <PageHeader icon="🎯" eyebrow="Planning" title="Budgeting & Planning" subtitle={currentOrg?.name} />
+      {(tab === 'Budget vs Actual' || tab === 'Scenarios') && (
+        <div className="mb-6 flex justify-end">
           <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
             {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="mb-6 flex gap-4 border-b border-gray-200 dark:border-midnight-800">
         {TABS.map((t) => (

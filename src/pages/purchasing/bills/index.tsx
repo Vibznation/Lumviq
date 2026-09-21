@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Bill = {
@@ -53,26 +54,18 @@ function BillsContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Bills</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/purchasing/purchase-orders" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Purchase orders →
-          </Link>
-          <Link href="/sales/recurring" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Recurring →
-          </Link>
-          <Link href="/purchasing/vendors" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Vendors →
-          </Link>
-          <Link href="/purchasing/bills/new" className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
-            New bill
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        icon="🧾"
+        eyebrow="Purchasing"
+        title="Bills"
+        subtitle={currentOrg?.name}
+        actions={[{ label: '+ New Bill', href: '/purchasing/bills/new' }]}
+        quickLinks={[
+          { label: 'Purchase Orders', href: '/purchasing/purchase-orders', icon: '📋' },
+          { label: 'Recurring', href: '/sales/recurring', icon: '🔁' },
+          { label: 'Vendors', href: '/purchasing/vendors', icon: '🏢' },
+        ]}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

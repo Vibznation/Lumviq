@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Entity = {
@@ -80,18 +81,13 @@ function MultiEntityContent() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Multi-entity management</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {currentOrg?.name} — each organization keeps its own independent ledger. Figures below are shown
-            side-by-side, never merged into a single set of journal entries.
-          </p>
-        </div>
-        <Link href="/settings/intercompany-transactions" className="text-sm text-teal-700 dark:text-teal-400 hover:underline whitespace-nowrap">
-          Intercompany transactions
-        </Link>
-      </div>
+      <PageHeader
+        icon="🏢"
+        eyebrow="Settings"
+        title="Multi-Entity Management"
+        subtitle={`${currentOrg?.name || ''} — each organization keeps its own independent ledger. Figures below are shown side-by-side, never merged into a single set of journal entries.`}
+        quickLinks={[{ label: 'Intercompany Transactions', href: '/settings/intercompany-transactions', icon: '🔄' }]}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type Webhook = { id: string; url: string; eventTypes: string[]; active: boolean; createdAt: string }
@@ -79,10 +80,12 @@ function WebhooksContent() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Webhooks</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        {currentOrg?.name} — deliveries are logged but not yet sent over HTTP (no public API events exist yet)
-      </p>
+      <PageHeader
+        icon="🔗"
+        eyebrow="Settings"
+        title="Webhooks"
+        subtitle={`${currentOrg?.name || ''} — deliveries are logged but not yet sent over HTTP (no public API events exist yet)`}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

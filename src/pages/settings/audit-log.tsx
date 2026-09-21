@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 import { resolveEntitlements, hasFeature } from '../../lib/entitlements'
 
@@ -65,28 +66,26 @@ function AuditLogContent() {
       <div className="mb-4">
         <Link href="/settings/organization" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">← Back to organization settings</Link>
       </div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Audit history</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            {currentOrg?.name} — {unlimited ? 'unlimited retention' : `most recent ${cap ?? 200} events`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
-            <option value="">All resource types</option>
-            {resourceTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {hasFullHistory ? (
-            <button onClick={exportCsv} className="rounded-md bg-teal-700 text-white text-sm px-3 py-1.5 hover:bg-teal-800">
-              Export CSV
-            </button>
-          ) : (
-            <Link href="/pricing" title="Unlimited history and CSV export require Enterprise" className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-600 hover:underline">
-              Export CSV (Enterprise)
-            </Link>
-          )}
-        </div>
+      <PageHeader
+        icon="📜"
+        eyebrow="Settings"
+        title="Audit History"
+        subtitle={`${currentOrg?.name || ''} — ${unlimited ? 'unlimited retention' : `most recent ${cap ?? 200} events`}`}
+      />
+      <div className="mb-6 flex justify-end gap-3">
+        <select value={resourceType} onChange={(e) => setResourceType(e.target.value)} className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1.5 text-sm">
+          <option value="">All resource types</option>
+          {resourceTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        {hasFullHistory ? (
+          <button onClick={exportCsv} className="rounded-md bg-teal-700 text-white text-sm px-3 py-1.5 hover:bg-teal-800">
+            Export CSV
+          </button>
+        ) : (
+          <Link href="/pricing" title="Unlimited history and CSV export require Enterprise" className="text-xs uppercase tracking-wide text-gray-400 dark:text-gray-600 hover:underline">
+            Export CSV (Enterprise)
+          </Link>
+        )}
       </div>
 
       {!hasFullHistory && (

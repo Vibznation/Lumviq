@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 const DEFAULT_RATE = '0.67'
@@ -87,10 +88,12 @@ function MileageContent() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Mileage tracking</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-        {currentOrg?.name} — log business travel for tax-deduction or reimbursement purposes.
-      </p>
+      <PageHeader
+        icon="🚗"
+        eyebrow="Purchasing"
+        title="Mileage Tracking"
+        subtitle={`${currentOrg?.name || ''} — log business travel for tax-deduction or reimbursement purposes.`}
+      />
 
       {upgradeMessage && (
         <div className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">

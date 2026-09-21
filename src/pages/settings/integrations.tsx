@@ -1,5 +1,6 @@
 import React from 'react'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { useAuth } from '../../lib/auth-context'
 
 const INTEGRATIONS = [
@@ -52,8 +53,7 @@ function IntegrationsContent() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-xl font-semibold text-midnight-900 dark:text-white mb-1">Integrations</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">{currentOrg?.name}</p>
+      <PageHeader icon="🔌" eyebrow="Settings" title="Integrations" subtitle={currentOrg?.name} />
 
       <div className="space-y-4">
         {integrations.map((integration) => (

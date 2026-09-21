@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
+import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
 
 type WorkflowRule = { id: string; name: string; triggerType: string; triggerConfig: any; actionType: string; active: boolean; lastRunAt: string | null }
@@ -99,19 +100,19 @@ function WorkflowsContent() {
       <div className="mb-4">
         <Link href="/settings/organization" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">← Back to organization settings</Link>
       </div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Workflow automation</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name} — rules run only when you click &quot;Run due rules&quot; (no background scheduler)</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleRunDue} disabled={running} className="text-sm text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
-            {running ? 'Running…' : 'Run due rules'}
-          </button>
-          <button onClick={() => setShowForm((s) => !s)} className="rounded-md bg-teal-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-teal-700">
-            {showForm ? 'Cancel' : 'New rule'}
-          </button>
-        </div>
+      <PageHeader
+        icon="🤖"
+        eyebrow="Settings"
+        title="Workflow Automation"
+        subtitle={`${currentOrg?.name || ''} — rules run only when you click "Run due rules" (no background scheduler)`}
+      />
+      <div className="mb-6 flex justify-end gap-3">
+        <button onClick={handleRunDue} disabled={running} className="text-sm text-teal-700 dark:text-teal-400 hover:underline disabled:opacity-50">
+          {running ? 'Running…' : 'Run due rules'}
+        </button>
+        <button onClick={() => setShowForm((s) => !s)} className="rounded-xl bg-teal-600 text-white px-3.5 py-2 text-sm font-medium hover:bg-teal-700 transition-colors">
+          {showForm ? 'Cancel' : '+ New Rule'}
+        </button>
       </div>
 
       {error && <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</div>}

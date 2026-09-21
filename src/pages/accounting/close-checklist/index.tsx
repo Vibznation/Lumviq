@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
+import PageHeader from '../../../components/PageHeader'
 import { authHeaders, useAuth } from '../../../lib/auth-context'
 
 type Period = { id: string; startDate: string; endDate: string; isClosed: boolean }
@@ -131,32 +132,20 @@ function CloseChecklistContent() {
 
   return (
     <div className="max-w-2xl">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">Period close checklist</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">{currentOrg?.name}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href="/accounting/journal-entries" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Journal entries
-          </Link>
-          <Link href="/accounting/general-ledger" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            General ledger
-          </Link>
-          <Link href="/accounting/chart-of-accounts" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Chart of accounts
-          </Link>
-          <Link href="/accounting/reconcile-account" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Reconcile an account
-          </Link>
-          <Link href="/accounting/fixed-assets" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Fixed assets
-          </Link>
-          <Link href="/accounting/loans" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-            Loans
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        icon="✅"
+        eyebrow="Accounting"
+        title="Period Close Checklist"
+        subtitle={currentOrg?.name}
+        quickLinks={[
+          { label: 'Journal Entries', href: '/accounting/journal-entries', icon: '📒' },
+          { label: 'General Ledger', href: '/accounting/general-ledger', icon: '📚' },
+          { label: 'Chart of Accounts', href: '/accounting/chart-of-accounts', icon: '⚖️' },
+          { label: 'Reconcile Account', href: '/accounting/reconcile-account', icon: '⚖️' },
+          { label: 'Fixed Assets', href: '/accounting/fixed-assets', icon: '🏢' },
+          { label: 'Loans', href: '/accounting/loans', icon: '🏦' },
+        ]}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
