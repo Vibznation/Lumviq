@@ -28,6 +28,36 @@ function loadEnv() {
 }
 loadEnv()
 
+function sanitizeDatabaseUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return rawUrl
+  let url = rawUrl.trim()
+  if ((url.startsWith('"') && url.endsWith('"')) || (url.startsWith("'") && url.endsWith("'"))) {
+    url = url.slice(1, -1).trim()
+  }
+  url = url.replace(/\\r\\n$|\\n$|\\r$/, '').trim()
+  const protocolIdx = url.indexOf('://')
+  const lastAtIdx = url.lastIndexOf('@')
+  if (protocolIdx !== -1 && lastAtIdx !== -1 && lastAtIdx > protocolIdx + 3) {
+    const protocol = url.slice(0, protocolIdx + 3)
+    const authPart = url.slice(protocolIdx + 3, lastAtIdx)
+    const hostAndRest = url.slice(lastAtIdx)
+    const colonIdx = authPart.indexOf(':')
+    if (colonIdx !== -1) {
+      const user = authPart.slice(0, colonIdx)
+      let pass = authPart.slice(colonIdx + 1)
+      if (pass.startsWith('[') && pass.endsWith(']')) {
+        pass = pass.slice(1, -1)
+      }
+      try {
+        pass = decodeURIComponent(pass)
+      } catch (_) {}
+      const encodedPass = encodeURIComponent(pass)
+      url = `${protocol}${user}:${encodedPass}${hostAndRest}`
+    }
+  }
+  return url
+}
+
 const { PrismaClient } = require('@prisma/client')
 
 const emailArg = process.argv[2]
@@ -41,7 +71,7 @@ async function main() {
     process.exit(1)
   }
 
-  const url = process.env.DATABASE_URL
+  const url = sanitizeDatabaseUrl(process.env.DATABASE_URL)
   const prisma = new PrismaClient({ datasources: { db: { url } } })
 
   try {
