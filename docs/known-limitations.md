@@ -72,12 +72,20 @@ explicit scope boundaries so no feature is misrepresented.
   file tax returns on the organization's behalf.
 
 ## Integrations (bank feeds, payments, OCR)
-- `src/lib/integrations/{bank-feed,payments,ocr}.ts` define TypeScript
-  interfaces only. No provider is wired up.
-- The Settings → Integrations page always shows these as "Not connected".
-  Bank activity must be imported manually (CSV/OFX) on the Banking page;
-  invoice/bill payments must be recorded manually; receipts/bills must be
-  entered manually (no OCR).
+- Lumviq uses a pluggable adapter architecture across Bank Feeds,
+  Payment Processing, OCR Bill/Receipt scanning, and Payroll.
+- **Provider Modes**: Each integration supports a `sandbox` mode for
+  deterministic testing and an external provider mode (`plaid`, `stripe`,
+  `vision`, `check`) that activates when credentials/API keys are
+  configured in environment variables (`PLAID_CLIENT_ID`, `STRIPE_SECRET_KEY`,
+  `GOOGLE_VISION_API_KEY`, `CHECK_API_KEY`).
+- When provider credentials are unset and mode is not `sandbox`, the
+  integration gracefully disables itself and returns informative status
+  via `GET /api/integrations/status`.
+- Bank activity can be ingested automatically via connected bank feeds or
+  imported manually (CSV/OFX). Payments can be collected via the client
+  portal or recorded manually. Bill fields can be extracted via OCR scan
+  or entered manually.
 
 ## Multi-entity
 - Linking a child organization under a parent is for **side-by-side**
@@ -87,13 +95,13 @@ explicit scope boundaries so no feature is misrepresented.
 
 ## Mileage tracking
 - `MileageLog` (`src/lib/mileage.ts`, `POST/GET /api/mileage`, UI at
-  `/purchasing/mileage`, gated behind `expenses.mileage-tracking` on
-  Start and above) is a directory/log only. The reimbursable amount
-  (`miles * ratePerMile`) is computed and stored once at creation and is
-  never recalculated if the rate changes later. Lumviq does not
-  calculate tax deductions, and a mileage entry is not automatically
-  turned into a `Reimbursement` — `reimbursementId` exists on the model
-  for a future manual-link step but nothing currently sets it.
+  `/purchasing/mileage`) tracks business trips and calculates reimbursable
+  amounts based on the IRS/custom mileage rate.
+- Unreimbursed mileage logs can be batch-selected and converted into a
+  multi-line pending `Reimbursement` transaction via
+  `POST /api/mileage/convert-to-reimbursement`, linking the mileage logs to
+  the created reimbursement. Reimbursements follow the standard approval
+  and payment posting lifecycle.
 
 ## AI Intelligence
 - The Intelligence page uses deterministic, rule-based calculations

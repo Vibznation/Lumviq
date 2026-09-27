@@ -86,6 +86,7 @@ function OrganizationSettingsContent() {
           { label: 'Funds & Grants', href: '/settings/funds', icon: '🎁' },
           { label: 'Contractors', href: '/settings/contractors', icon: '🧑\u200d💼' },
           { label: 'Webhooks', href: '/settings/webhooks', icon: '🔗' },
+          { label: 'Background Jobs', href: '/settings/jobs', icon: '⚡' },
           { label: 'Custom Roles', href: '/settings/roles', icon: '👥' },
           { label: 'Custom Fields', href: '/settings/custom-fields', icon: '🧱' },
           { label: 'Workflows', href: '/settings/workflows', icon: '🤖' },

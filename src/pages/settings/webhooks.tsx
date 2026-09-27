@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import ProtectedRoute from '../../components/ProtectedRoute'
 import PageHeader from '../../components/PageHeader'
 import { authHeaders, useAuth } from '../../lib/auth-context'
@@ -8,10 +9,9 @@ type Webhook = { id: string; url: string; eventTypes: string[]; active: boolean;
 const EVENT_TYPES = ['invoice.paid', 'bill.paid', 'invoice.overdue', 'approval.requested']
 
 /**
- * Outbound webhook subscriptions for the public developer API. No public
- * API exists yet to generate real events — deliveries are logged but not
- * actually sent over HTTP yet. See src/lib/webhooks.ts and
- * docs/known-limitations.md.
+ * Outbound webhook subscriptions for the public developer API. Deliveries
+ * are enqueued to the BackgroundJob queue and delivered via signed HTTP POST
+ * with exponential backoff retries.
  */
 function WebhooksContent() {
   const { token, currentOrg } = useAuth()
@@ -84,7 +84,14 @@ function WebhooksContent() {
         icon="🔗"
         eyebrow="Settings"
         title="Webhooks"
-        subtitle={`${currentOrg?.name || ''} — deliveries are logged but not yet sent over HTTP (no public API events exist yet)`}
+        subtitle={`${currentOrg?.name || ''} — outbound event subscriptions dispatched through the background job queue.`}
+        actions={[
+          {
+            label: '⚡ Background Jobs Queue',
+            href: '/settings/jobs',
+            variant: 'secondary',
+          },
+        ]}
       />
 
       {error && (

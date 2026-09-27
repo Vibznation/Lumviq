@@ -1,52 +1,62 @@
 # Integration adapter documentation
 
-Lumviq defines TypeScript **interfaces** for three categories of external
-integration. None of them are connected to a live third-party provider —
-every adapter is a stub that returns a "not connected" / simulated result.
-This is intentional scaffolding so a real provider can be dropped in
-later without changing call sites. See
-[known-limitations.md](known-limitations.md) for the user-facing
-disclosure of this scope boundary.
+Lumviq defines TypeScript **interfaces** and concrete adapter implementations
+for four categories of external integration: Bank Feeds, Payments, OCR, and
+Payroll. Each integration uses a factory function that selects between a
+deterministic `Sandbox` provider (for testing and local development) and real
+cloud providers (`Plaid`, `Stripe`, `Vision AI`, `Check`).
+
+The unified status across all adapters can be queried via
+`GET /api/integrations/status` and viewed at Settings → Integrations.
 
 ## Bank feeds — `src/lib/integrations/bank-feed.ts`
 ```ts
 export interface BankFeedProvider {
+  readonly name: string
+  isConfigured(): boolean
+  getAccounts(organizationId: string): Promise<BankFeedAccount[]>
   fetchTransactions(accountId: string, since?: Date): Promise<BankFeedTransaction[]>
-  isConnected(organizationId: string): Promise<boolean>
 }
 ```
-- No implementation is registered. The Banking page only supports manual
-  CSV/OFX import (`src/pages/api/banking/import.ts`) and manual
-  reconciliation (`src/pages/api/banking/reconcile/*`).
-- To add a real provider (e.g. Plaid): implement `BankFeedProvider`,
-  register it behind a factory function, and store provider credentials
-  per-organization (never in source control — see
-  [security-notes.md](security-notes.md)).
+- **Factory**: `getBankFeedProvider()` in `src/lib/integrations/bank-feed.ts`.
+- **Modes**:
+  - `BANK_FEED_PROVIDER_MODE=sandbox` → `SandboxBankFeedProvider` (deterministic mock checking/savings transactions).
+  - `BANK_FEED_PROVIDER_MODE=plaid` → `PlaidBankFeedProvider` (requires `PLAID_CLIENT_ID` and `PLAID_SECRET`).
+- **Endpoints**:
+  - `GET /api/banking/feed-accounts`: lists linked bank accounts.
+  - `POST /api/banking/sync-feed`: fetches new feed transactions and records them into `ImportedTransaction` for reconciliation.
 
 ## Payments — `src/lib/integrations/payments.ts`
 ```ts
 export interface PaymentProcessor {
-  createPaymentIntent(invoiceId: string, amountMinor: number): Promise<PaymentIntentResult>
-  isConnected(organizationId: string): Promise<boolean>
+  readonly name: string
+  isConfigured(): boolean
+  createPaymentIntent(params: PaymentIntentParams): Promise<PaymentIntentResult>
+  verifyPayment(paymentIntentId: string): Promise<PaymentVerificationResult>
 }
 ```
-- No implementation is registered. Invoice payments are recorded manually
-  via `POST /api/invoices/[id]/payments` — no card/ACH collection exists.
-- The "Lumviq Payments" add-on is priced and shown in the billing UI but
-  is not functionally connected to any processor; `/pricing` explicitly
-  discloses this.
+- **Factory**: `getPaymentProcessor()` in `src/lib/integrations/payments.ts`.
+- **Modes**:
+  - `PAYMENT_PROCESSOR_MODE=sandbox` → `SandboxPaymentProcessor` (simulates immediate or client-secret payment intent).
+  - `PAYMENT_PROCESSOR_MODE=stripe` → `StripePaymentProcessor` (requires `STRIPE_SECRET_KEY`).
+- **Client Portal Flow**:
+  - `POST /api/portal/invoices/[id]/pay`: accepts online card/ACH payments for customer invoices, creates payment intent, records the payment, and posts a balanced journal entry depositing funds to cash.
 
 ## OCR (receipt/bill scanning) — `src/lib/integrations/ocr.ts`
 ```ts
 export interface OcrProvider {
+  readonly name: string
+  isConfigured(): boolean
   extractBillFields(fileBuffer: Buffer, mimeType: string): Promise<OcrExtractionResult>
-  isConnected(organizationId: string): Promise<boolean>
 }
 ```
-- No implementation is registered. Bills/expenses must be entered
-  manually; the new [Documents](../src/lib/documents.ts) feature lets
-  files be attached to a bill/invoice for record-keeping, but does not
-  extract any data from them.
+- **Factory**: `getOcrProvider()` in `src/lib/integrations/ocr.ts`.
+- **Modes**:
+  - `OCR_PROVIDER_MODE=sandbox` → `SandboxOcrProvider` (extracts structured vendor, dates, invoice #, and line items).
+  - `OCR_PROVIDER_MODE=vision` → `VisionOcrProvider` (requires `GOOGLE_VISION_API_KEY`).
+- **Usage**:
+  - `POST /api/ocr/scan`: extracts bill fields from uploaded receipt/bill documents (PDF, JPG, PNG).
+  - Wired into the Bill creation form (`/purchasing/bills/new`) to auto-populate vendor, invoice number, due date, and line items.
 
 ## Payroll — `src/lib/integrations/payroll.ts` + `payroll-sandbox.ts`
 ```ts

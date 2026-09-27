@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import ProtectedRoute from '../../../components/ProtectedRoute'
@@ -27,7 +27,10 @@ function NewBillContent() {
   const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10))
   const [lines, setLines] = useState<LineForm[]>([emptyLine()])
   const [error, setError] = useState<string | null>(null)
+  const [ocrMessage, setOcrMessage] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!currentOrg) return
@@ -58,6 +61,70 @@ function NewBillContent() {
       .then((p: ProductOption[]) => setProducts(p.filter((prod) => prod.active)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id])
+
+  async function handleOcrUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !currentOrg) return
+    setScanning(true)
+    setError(null)
+    setOcrMessage(null)
+
+    try {
+      const reader = new FileReader()
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string
+          const base64 = result.split(',')[1] || result
+          resolve(base64)
+        }
+        reader.onerror = reject
+      })
+      reader.readAsDataURL(file)
+      const fileBase64 = await base64Promise
+
+      const res = await fetch('/api/ocr/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({
+          organizationId: currentOrg.id,
+          fileBase64,
+          mimeType: file.type,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to scan document')
+
+      const ext = data.extracted || {}
+      if (ext.issueDate) setIssueDate(ext.issueDate)
+      if (ext.dueDate) setDueDate(ext.dueDate)
+
+      if (ext.vendorName && vendors.length > 0) {
+        const matched = vendors.find((v) => v.name.toLowerCase().includes(ext.vendorName.toLowerCase()))
+        if (matched) setVendorId(matched.id)
+      }
+
+      if (Array.isArray(ext.lineItems) && ext.lineItems.length > 0) {
+        const defaultAcc = expenseAccounts[0]?.id || ''
+        setLines(
+          ext.lineItems.map((item: any) => ({
+            description: item.description || 'Scanned item',
+            quantity: '1',
+            unitPrice: item.amount || '0.00',
+            accountId: defaultAcc,
+            productId: '',
+          }))
+        )
+      }
+
+      setOcrMessage(`Successfully extracted details via ${data.provider} (${Math.round((ext.confidence || 0.9) * 100)}% confidence). Review fields below.`)
+    } catch (err: any) {
+      setError(`OCR Scan: ${err.message}`)
+    } finally {
+      setScanning(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   function updateLine(index: number, patch: Partial<LineForm>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
@@ -142,10 +209,34 @@ function NewBillContent() {
     <div className="max-w-2xl">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-midnight-900 dark:text-white">New bill</h1>
-        <Link href="/purchasing/bills" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
-          Back to bills
-        </Link>
+        <div className="flex items-center gap-3">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleOcrUpload}
+            accept="image/*,application/pdf"
+            className="hidden"
+          />
+          <button
+            type="button"
+            disabled={scanning}
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 text-xs font-medium hover:bg-teal-100 disabled:opacity-50 transition"
+          >
+            <span>📷</span>
+            <span>{scanning ? 'Scanning…' : 'Scan Receipt / Bill (OCR)'}</span>
+          </button>
+          <Link href="/purchasing/bills" className="text-sm text-teal-700 dark:text-teal-400 hover:underline">
+            Back to bills
+          </Link>
+        </div>
       </div>
+
+      {ocrMessage && (
+        <div className="mb-4 text-sm text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2">
+          {ocrMessage}
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">

@@ -77,7 +77,34 @@
   organization-invite flow; real signed HTTP webhook delivery
   (`src/lib/webhooks.ts`) dispatched asynchronously through the job
   queue instead of only being logged; account reconciliation for any
-  balance-sheet account with a line-clearing workflow
+  balance-sheet account with a line-clearing workflow.
+
+- **Phase 8 expansion**: Pluggable adapter ecosystem across all major
+  integrations, Mileage-to-Reimbursement conversion, and Background Jobs
+  management:
+  - **Payment Processor Adapter**: `PaymentProcessor` provider interface
+    with `SandboxPaymentProcessor` and `StripePaymentProcessor`. Online
+    portal payment flow (`POST /api/portal/invoices/[id]/pay`) supporting
+    card/ACH intent creation, auto-reconciliation, and double-entry
+    ledger deposit posting.
+  - **Bank Feeds Sync Adapter**: `BankFeedProvider` interface with
+    `SandboxBankFeedProvider` and `PlaidBankFeedProvider`. Feed account
+    listing (`GET /api/banking/feed-accounts`) and direct feed sync
+    (`POST /api/banking/sync-feed`) populating imported bank transactions.
+  - **Receipt & Bill OCR Scanning**: `OcrProvider` interface with
+    `SandboxOcrProvider` and `VisionOcrProvider`. Document scan endpoint
+    (`POST /api/ocr/scan`) with automatic vendor matching and line item
+    extraction wired directly into bill creation (`/purchasing/bills/new`).
+  - **Mileage to Reimbursement Conversion**: Multi-line trip batching
+    and conversion (`POST /api/mileage/convert-to-reimbursement`) with
+    interactive selection and payee matching in `/purchasing/mileage`.
+  - **Background Jobs Dashboard**: Full queue management UI
+    (`/settings/jobs`) with live status metrics, pending/failed filters,
+    manual queue processor trigger (`POST /api/jobs/process`), and
+    failed job retry actions (`POST /api/jobs/[id]/retry`).
+  - **Integrations Hub**: Live integration status endpoint
+    (`GET /api/integrations/status`) reporting active adapter modes and
+    configuration status across Payroll, Payments, Bank Feeds, and OCR.
   (`src/lib/account-reconciliation.ts`); a period close checklist
   (`src/lib/close-checklist.ts`); a fixed asset register with
   straight-line depreciation posting (`src/lib/fixed-assets.ts`); a

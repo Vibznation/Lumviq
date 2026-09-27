@@ -14,14 +14,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const bankAccount = await prisma.bankAccount.findUnique({ where: { id: bankAccountId } })
   if (!bankAccount || bankAccount.organizationId !== organizationId) return res.status(400).json({ error: 'Invalid bank account for this organization' })
   // transactions: [{ transactionDate, amount, description, externalId }]
-  const incomingExternalIds = transactions.map((t) => t.externalId).filter((id): id is string => !!id)
+  const incomingExternalIds = (transactions as any[]).map((t: any) => t.externalId).filter((id): id is string => !!id)
   const existing = incomingExternalIds.length
     ? await prisma.bankTransaction.findMany({
         where: { bankAccountId, externalId: { in: incomingExternalIds } },
         select: { externalId: true },
       })
     : []
-  const existingIds = new Set(existing.map((e) => e.externalId))
+  const existingIds = new Set<string | null>()
+  for (const item of (existing as any[])) {
+    existingIds.add(item.externalId)
+  }
 
   const created = []
   let skipped = 0
