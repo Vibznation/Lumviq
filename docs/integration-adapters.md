@@ -120,6 +120,22 @@ export interface PayrollProvider {
   classification, encrypted tax id, payment method), and
   `src/lib/contractors.ts`'s `is1099Eligible()` flags contractors likely
   to need a 1099 (display-only simplification, not tax advice).
+- Pay schedules and time off are plain CRUD, not provider-synced yet:
+  `GET/POST /api/payroll/pay-schedules` + `PATCH
+  /api/payroll/pay-schedules/[id]` manage `PaySchedule` rows (weekly/
+  biweekly/semimonthly/monthly cadence, assigned to an employee via
+  `PATCH /api/employees/[id]`'s `payScheduleId`); `GET/POST
+  /api/payroll/pto-policies` + `PATCH /api/payroll/pto-policies/[id]`
+  manage organization-level PTO/sick-leave accrual policies; `GET/POST
+  /api/employees/[id]/pto-balances` reads/manually corrects an employee's
+  `PtoBalance` per policy; `GET/POST /api/employees/[id]/pto-requests`
+  creates a time-off request (status `pending`); `GET
+  /api/pto-requests?organizationId=&status=` lists an org's request queue
+  and `PATCH /api/pto-requests/[id]/decide` approves/denies one, deducting
+  the requested hours from the matching balance on approval. None of this
+  automatically accrues balances per pay run or syncs with a provider —
+  that would require `PayrollProvider` interface additions once a real
+  provider is contracted (Check/Gusto Embedded both support PTO policies).
 - SSNs and bank routing/account numbers are encrypted at rest via
   `src/lib/encryption.ts` (AES-256-GCM, `FIELD_ENCRYPTION_KEY` required in
   production) — the first field-level PII encryption in this codebase.

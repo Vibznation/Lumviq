@@ -97,6 +97,27 @@ type Approval = {
   createdAt: string
 }
 type Account = { id: string; code: string; name: string; type: string }
+type PaySchedule = {
+  id: string
+  name: string
+  frequency: string
+  anchorDate: string
+  nextPayDate: string | null
+  autoPayrollEnabled: boolean
+  active: boolean
+}
+type PtoPolicyT = { id: string; name: string; category: string; accrualMethod: string; accrualRate: string; maxBalance: string | null; active: boolean }
+type PtoBalanceT = { id: string; balanceHours: string; ptoPolicy: PtoPolicyT }
+type PtoRequestT = {
+  id: string
+  startDate: string
+  endDate: string
+  hours: string
+  status: string
+  reason: string | null
+  ptoPolicy: PtoPolicyT | null
+  employee?: { id: string; name: string }
+}
 
 function currency(n: string | number | null | undefined) {
   if (n === null || n === undefined) return '—'
@@ -121,7 +142,7 @@ function useApi(token: string | null) {
   }
 }
 
-const TABS = ['Setup', 'Employees', 'Contractors', 'Pay runs', 'Tax center', 'Reports'] as const
+const TABS = ['Setup', 'Employees', 'Contractors', 'Pay runs', 'Time off', 'Tax center', 'Reports'] as const
 type Tab = (typeof TABS)[number]
 
 function Card({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
@@ -164,13 +185,17 @@ function SetupTab({ orgId, api, onError }: { orgId: string; api: ReturnType<type
   const [savingBank, setSavingBank] = useState(false)
   const [microDeposits, setMicroDeposits] = useState<Record<string, string>>({})
   const [verifyAmounts, setVerifyAmounts] = useState<Record<string, [string, string]>>({})
+  const [schedules, setSchedules] = useState<PaySchedule[]>([])
+  const [scheduleForm, setScheduleForm] = useState({ name: '', frequency: 'biweekly', anchorDate: '', autoPayrollEnabled: false })
+  const [savingSchedule, setSavingSchedule] = useState(false)
 
   async function load() {
     try {
-      const [c, wps, banks] = await Promise.all([
+      const [c, wps, banks, scheds] = await Promise.all([
         api.get(`/api/payroll/company?organizationId=${orgId}`),
         api.get(`/api/payroll/workplaces?organizationId=${orgId}`),
         api.get(`/api/payroll/employer-bank-account?organizationId=${orgId}`),
+        api.get(`/api/payroll/pay-schedules?organizationId=${orgId}`),
       ])
       setCompany(c)
       if (c) {
@@ -184,12 +209,28 @@ function SetupTab({ orgId, api, onError }: { orgId: string; api: ReturnType<type
       }
       setWorkplaces(wps)
       setBankAccounts(banks)
+      setSchedules(scheds)
     } catch (err: any) {
       onError(err.message)
     }
   }
 
   useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [orgId])
+
+  async function createSchedule(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingSchedule(true)
+    onError(null)
+    try {
+      await api.post('/api/payroll/pay-schedules', { organizationId: orgId, ...scheduleForm })
+      setScheduleForm({ name: '', frequency: 'biweekly', anchorDate: '', autoPayrollEnabled: false })
+      await load()
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
 
   async function saveCompany(e: React.FormEvent) {
     e.preventDefault()
@@ -314,6 +355,46 @@ function SetupTab({ orgId, api, onError }: { orgId: string; api: ReturnType<type
           <Field label="Signatory title"><input required className={inputCls} value={form.signatoryTitle} onChange={(e) => setForm((f) => ({ ...f, signatoryTitle: e.target.value }))} /></Field>
           <div className="col-span-2">
             <button type="submit" disabled={saving} className={btnPrimary}>{saving ? 'Saving…' : 'Save company profile'}</button>
+          </div>
+        </form>
+      </Card>
+
+      <Card title="Pay schedules">
+        {schedules.length > 0 && (
+          <table className="w-full text-sm mb-4">
+            <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+              <tr><th className="py-1">Name</th><th className="py-1">Frequency</th><th className="py-1">Next pay date</th><th className="py-1">Auto payroll</th></tr>
+            </thead>
+            <tbody>
+              {schedules.map((s) => (
+                <tr key={s.id} className="border-t border-gray-100 dark:border-midnight-800">
+                  <td className="py-1 text-gray-900 dark:text-gray-100">{s.name}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{s.frequency}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{s.nextPayDate ? new Date(s.nextPayDate).toLocaleDateString() : '—'}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{s.autoPayrollEnabled ? 'On' : 'Off'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <form onSubmit={createSchedule} className="grid grid-cols-4 gap-3 max-w-2xl">
+          <Field label="Name"><input required className={inputCls} value={scheduleForm.name} onChange={(e) => setScheduleForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+          <Field label="Frequency">
+            <select className={inputCls} value={scheduleForm.frequency} onChange={(e) => setScheduleForm((f) => ({ ...f, frequency: e.target.value }))}>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
+              <option value="semimonthly">Semimonthly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </Field>
+          <Field label="Anchor date"><input required type="date" className={inputCls} value={scheduleForm.anchorDate} onChange={(e) => setScheduleForm((f) => ({ ...f, anchorDate: e.target.value }))} /></Field>
+          <Field label="Auto payroll">
+            <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mt-2">
+              <input type="checkbox" checked={scheduleForm.autoPayrollEnabled} onChange={(e) => setScheduleForm((f) => ({ ...f, autoPayrollEnabled: e.target.checked }))} /> Enabled
+            </label>
+          </Field>
+          <div className="col-span-4">
+            <button type="submit" disabled={savingSchedule} className={btnSecondary}>{savingSchedule ? 'Saving…' : '+ Add pay schedule'}</button>
           </div>
         </form>
       </Card>
@@ -1523,6 +1604,207 @@ function ReportsTab({ orgId, api, onError }: { orgId: string; api: ReturnType<ty
   )
 }
 
+function TimeOffTab({ orgId, api, onError }: { orgId: string; api: ReturnType<typeof useApi>; onError: (m: string | null) => void }) {
+  const [policies, setPolicies] = useState<PtoPolicyT[]>([])
+  const [policyForm, setPolicyForm] = useState({ name: '', category: 'vacation', accrualMethod: 'per_pay_period', accrualRate: '' })
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [pending, setPending] = useState<PtoRequestT[]>([])
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
+  const [balances, setBalances] = useState<PtoBalanceT[]>([])
+  const [requestForm, setRequestForm] = useState({ ptoPolicyId: '', startDate: '', endDate: '', hours: '', reason: '' })
+  const [savingRequest, setSavingRequest] = useState(false)
+  const [deciding, setDeciding] = useState<string | null>(null)
+
+  async function load() {
+    try {
+      const [p, pend, emps] = await Promise.all([
+        api.get(`/api/payroll/pto-policies?organizationId=${orgId}`),
+        api.get(`/api/pto-requests?organizationId=${orgId}&status=pending`),
+        api.get(`/api/employees?organizationId=${orgId}`),
+      ])
+      setPolicies(p)
+      setPending(pend)
+      setEmployees(emps)
+    } catch (err: any) {
+      onError(err.message)
+    }
+  }
+  useEffect(() => { load() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [orgId])
+
+  async function loadBalances(employeeId: string) {
+    setSelectedEmployeeId(employeeId)
+    if (!employeeId) return setBalances([])
+    try {
+      setBalances(await api.get(`/api/employees/${employeeId}/pto-balances`))
+    } catch (err: any) {
+      onError(err.message)
+    }
+  }
+
+  async function createPolicy(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingPolicy(true)
+    onError(null)
+    try {
+      await api.post('/api/payroll/pto-policies', { organizationId: orgId, ...policyForm })
+      setPolicyForm({ name: '', category: 'vacation', accrualMethod: 'per_pay_period', accrualRate: '' })
+      await load()
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setSavingPolicy(false)
+    }
+  }
+
+  async function createRequest(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedEmployeeId) { onError('Select an employee first'); return }
+    setSavingRequest(true)
+    onError(null)
+    try {
+      await api.post(`/api/employees/${selectedEmployeeId}/pto-requests`, requestForm)
+      setRequestForm({ ptoPolicyId: '', startDate: '', endDate: '', hours: '', reason: '' })
+      await load()
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setSavingRequest(false)
+    }
+  }
+
+  async function decide(id: string, status: 'approved' | 'denied') {
+    setDeciding(id)
+    onError(null)
+    try {
+      await api.patch(`/api/pto-requests/${id}/decide`, { status })
+      await load()
+      if (selectedEmployeeId) await loadBalances(selectedEmployeeId)
+    } catch (err: any) {
+      onError(err.message)
+    } finally {
+      setDeciding(null)
+    }
+  }
+
+  return (
+    <div>
+      <Card title="PTO policies">
+        {policies.length > 0 && (
+          <table className="w-full text-sm mb-4">
+            <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+              <tr><th className="py-1">Name</th><th className="py-1">Category</th><th className="py-1">Accrual</th><th className="py-1">Max balance</th></tr>
+            </thead>
+            <tbody>
+              {policies.map((p) => (
+                <tr key={p.id} className="border-t border-gray-100 dark:border-midnight-800">
+                  <td className="py-1 text-gray-900 dark:text-gray-100">{p.name}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{p.category}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{p.accrualRate}/{p.accrualMethod.replace(/_/g, ' ')}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{p.maxBalance ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <form onSubmit={createPolicy} className="grid grid-cols-4 gap-3 max-w-2xl">
+          <Field label="Name"><input required className={inputCls} value={policyForm.name} onChange={(e) => setPolicyForm((f) => ({ ...f, name: e.target.value }))} /></Field>
+          <Field label="Category">
+            <select className={inputCls} value={policyForm.category} onChange={(e) => setPolicyForm((f) => ({ ...f, category: e.target.value }))}>
+              <option value="vacation">Vacation</option>
+              <option value="sick">Sick</option>
+              <option value="personal">Personal</option>
+              <option value="unpaid">Unpaid</option>
+            </select>
+          </Field>
+          <Field label="Accrual method">
+            <select className={inputCls} value={policyForm.accrualMethod} onChange={(e) => setPolicyForm((f) => ({ ...f, accrualMethod: e.target.value }))}>
+              <option value="per_pay_period">Per pay period</option>
+              <option value="annual_grant">Annual grant</option>
+              <option value="hours_worked">Hours worked</option>
+            </select>
+          </Field>
+          <Field label="Accrual rate (hours)"><input className={inputCls} value={policyForm.accrualRate} onChange={(e) => setPolicyForm((f) => ({ ...f, accrualRate: e.target.value }))} /></Field>
+          <div className="col-span-4">
+            <button type="submit" disabled={savingPolicy} className={btnSecondary}>{savingPolicy ? 'Saving…' : '+ Add PTO policy'}</button>
+          </div>
+        </form>
+      </Card>
+
+      <Card title="Pending requests">
+        {pending.length === 0 ? (
+          <p className="text-sm text-gray-500">No pending time-off requests.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+              <tr><th className="py-1">Employee</th><th className="py-1">Policy</th><th className="py-1">Dates</th><th className="py-1">Hours</th><th className="py-1">Decide</th></tr>
+            </thead>
+            <tbody>
+              {pending.map((r) => (
+                <tr key={r.id} className="border-t border-gray-100 dark:border-midnight-800">
+                  <td className="py-1 text-gray-900 dark:text-gray-100">{r.employee?.name}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{r.ptoPolicy?.name || '—'}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{new Date(r.startDate).toLocaleDateString()} – {new Date(r.endDate).toLocaleDateString()}</td>
+                  <td className="py-1 text-gray-500 dark:text-gray-400">{r.hours}</td>
+                  <td className="py-1">
+                    <div className="flex gap-2">
+                      <button onClick={() => decide(r.id, 'approved')} disabled={deciding === r.id} className={btnPrimary}>Approve</button>
+                      <button onClick={() => decide(r.id, 'denied')} disabled={deciding === r.id} className={btnSecondary}>Deny</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      <Card title="Employee balances & new request">
+        <Field label="Employee">
+          <select className={inputCls} value={selectedEmployeeId} onChange={(e) => loadBalances(e.target.value)}>
+            <option value="">Select an employee…</option>
+            {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </Field>
+        {selectedEmployeeId && (
+          <>
+            {balances.length > 0 && (
+              <table className="w-full text-sm mt-3 mb-4">
+                <thead className="text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                  <tr><th className="py-1">Policy</th><th className="py-1">Balance (hours)</th></tr>
+                </thead>
+                <tbody>
+                  {balances.map((b) => (
+                    <tr key={b.id} className="border-t border-gray-100 dark:border-midnight-800">
+                      <td className="py-1 text-gray-900 dark:text-gray-100">{b.ptoPolicy.name}</td>
+                      <td className="py-1 text-gray-500 dark:text-gray-400">{b.balanceHours}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <form onSubmit={createRequest} className="grid grid-cols-4 gap-3 max-w-2xl mt-3">
+              <Field label="Policy">
+                <select className={inputCls} value={requestForm.ptoPolicyId} onChange={(e) => setRequestForm((f) => ({ ...f, ptoPolicyId: e.target.value }))}>
+                  <option value="">None</option>
+                  {policies.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Start date"><input required type="date" className={inputCls} value={requestForm.startDate} onChange={(e) => setRequestForm((f) => ({ ...f, startDate: e.target.value }))} /></Field>
+              <Field label="End date"><input required type="date" className={inputCls} value={requestForm.endDate} onChange={(e) => setRequestForm((f) => ({ ...f, endDate: e.target.value }))} /></Field>
+              <Field label="Hours"><input required className={inputCls} value={requestForm.hours} onChange={(e) => setRequestForm((f) => ({ ...f, hours: e.target.value }))} /></Field>
+              <div className="col-span-4">
+                <input placeholder="Reason (optional)" className={`${inputCls} mb-2`} value={requestForm.reason} onChange={(e) => setRequestForm((f) => ({ ...f, reason: e.target.value }))} />
+                <button type="submit" disabled={savingRequest} className={btnSecondary}>{savingRequest ? 'Submitting…' : '+ Request time off'}</button>
+              </div>
+            </form>
+          </>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 function PayrollContent() {
   const { token, currentOrg } = useAuth()
   const api = useApi(token)
@@ -1573,6 +1855,7 @@ function PayrollContent() {
       {tab === 'Employees' && <EmployeesTab orgId={currentOrg.id} api={api} onError={setError} providerConnected={providerConnected} />}
       {tab === 'Contractors' && <ContractorsTab orgId={currentOrg.id} api={api} onError={setError} providerConnected={providerConnected} />}
       {tab === 'Pay runs' && <PayRunsTab orgId={currentOrg.id} api={api} onError={setError} />}
+      {tab === 'Time off' && <TimeOffTab orgId={currentOrg.id} api={api} onError={setError} />}
       {tab === 'Tax center' && <TaxCenterTab orgId={currentOrg.id} api={api} onError={setError} />}
       {tab === 'Reports' && <ReportsTab orgId={currentOrg.id} api={api} onError={setError} />}
     </div>
