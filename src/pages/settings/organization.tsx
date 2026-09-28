@@ -20,6 +20,7 @@ function OrganizationSettingsContent() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('member')
   const [inviteStatus, setInviteStatus] = useState<string | null>(null)
+  const [emailConfigured, setEmailConfigured] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   async function loadMembers() {
@@ -39,8 +40,16 @@ function OrganizationSettingsContent() {
 
   useEffect(() => {
     loadMembers()
+    if (token) {
+      fetch('/api/integrations/status', { headers: authHeaders(token) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.email?.configured) setEmailConfigured(true)
+        })
+        .catch(() => {})
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg?.id])
+  }, [currentOrg?.id, token])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
@@ -58,7 +67,11 @@ function OrganizationSettingsContent() {
         throw new Error(j.error || 'Could not send invitation')
       }
       const invite = await res.json()
-      setInviteStatus(`Invitation created. Share this token with ${inviteEmail}: ${invite.token}`)
+      if (emailConfigured) {
+        setInviteStatus(`Invitation queued/sent to ${inviteEmail}. Token: ${invite.token}`)
+      } else {
+        setInviteStatus(`Invitation created. Share this token with ${inviteEmail}: ${invite.token}`)
+      }
       setInviteEmail('')
     } catch (err: any) {
       setInviteStatus(err.message)
@@ -163,7 +176,9 @@ function OrganizationSettingsContent() {
         </form>
         {inviteStatus && <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{inviteStatus}</p>}
         <p className="mt-2 text-xs text-gray-400">
-          Email delivery is not yet configured — invitees currently need the token shared manually.
+          {emailConfigured
+            ? 'Email delivery is connected. Invites will be dispatched automatically via background email jobs.'
+            : 'Email delivery is currently in console mode — you can also check Integrations settings to connect SMTP or Resend.'}
         </p>
       </section>
     </div>

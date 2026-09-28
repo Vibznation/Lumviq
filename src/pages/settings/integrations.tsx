@@ -9,6 +9,8 @@ type StatusResponse = {
   payments: { mode: 'sandbox' | 'stripe' | 'none'; name: string; configured: boolean }
   bankFeeds: { mode: 'sandbox' | 'plaid' | 'none'; name: string; configured: boolean }
   ocr: { mode: 'sandbox' | 'vision' | 'none'; name: string; configured: boolean }
+  email?: { mode: 'smtp' | 'resend' | 'sandbox' | 'none'; name: string; configured: boolean; fromAddress?: string }
+  fx?: { mode: 'sandbox' | 'open' | 'none'; name: string; configured: boolean }
 }
 
 const PAYROLL_DESCRIPTION = 'Calculate tax withholding, file payroll tax returns, and pay employees/contractors via direct deposit.'
@@ -17,23 +19,81 @@ const PAYROLL_DETAIL_SANDBOX = 'Connected to a sandbox (test-mode) payroll provi
 const PAYROLL_DETAIL_CHECK = 'Connected to Check, a licensed embedded-payroll provider. Onboarding, calculation, approval, direct deposit and tax filing now run against a real provider account. Go to the Payroll page to onboard your company, employees and contractors.'
 
 function IntegrationsContent() {
-  const { currentOrg, token } = useAuth()
+  const { currentOrg, token, user } = useAuth()
   const [status, setStatus] = React.useState<StatusResponse | null>(null)
+  const [testEmailLoading, setTestEmailLoading] = React.useState(false)
+  const [testEmailMessage, setTestEmailMessage] = React.useState<string | null>(null)
+  const [testEmailError, setTestEmailError] = React.useState<string | null>(null)
 
-  React.useEffect(() => {
+  const loadStatus = () => {
     if (!token) return
     fetch('/api/integrations/status', { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
       .then((json) => { if (json) setStatus(json) })
       .catch(() => {})
+  }
+
+  React.useEffect(() => {
+    loadStatus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
+
+  async function handleSendTestEmail() {
+    if (!currentOrg || !token) return
+    setTestEmailLoading(true)
+    setTestEmailMessage(null)
+    setTestEmailError(null)
+
+    try {
+      const res = await fetch('/api/integrations/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ organizationId: currentOrg.id, to: user?.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Test email failed')
+      setTestEmailMessage(`Test email successfully sent via ${data.provider} to ${data.recipient}. Status: ${data.status}`)
+    } catch (err: any) {
+      setTestEmailError(err.message)
+    } finally {
+      setTestEmailLoading(false)
+    }
+  }
 
   const payrollMode = status?.payroll.mode || 'none'
   const paymentsMode = status?.payments.mode || 'none'
   const bankFeedMode = status?.bankFeeds.mode || 'none'
   const ocrMode = status?.ocr.mode || 'none'
+  const emailMode = status?.email?.mode || 'none'
 
   const integrations = [
+    {
+      name: 'Email delivery',
+      description: 'Outbound email delivery for invitations, invoice notices, receipts, and background notifications.',
+      status: emailMode === 'sandbox' ? 'Sandbox (test mode)' : emailMode === 'resend' ? 'Connected (Resend API)' : emailMode === 'smtp' ? 'Connected (SMTP Relay)' : 'Console (Logged Only)',
+      detail: emailMode === 'sandbox'
+        ? 'Connected to Sandbox Email simulator. Outbound emails are processed and logged to EmailLog with simulated delivery.'
+        : emailMode === 'resend'
+        ? `Connected to Resend API. Sending from ${status?.email?.fromAddress || 'notifications@lumviq.com'}.`
+        : emailMode === 'smtp'
+        ? `Connected via SMTP Relay. Sending from ${status?.email?.fromAddress || 'notifications@lumviq.com'}.`
+        : 'No SMTP or Resend API key configured. Emails are logged to the database and console only without live transmission.',
+      customAction: (
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSendTestEmail}
+            disabled={testEmailLoading}
+            className="text-xs px-2.5 py-1 rounded bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 font-medium hover:bg-teal-100 disabled:opacity-50"
+          >
+            {testEmailLoading ? 'Sending…' : '✉️ Send Test Email'}
+          </button>
+          <Link href="/settings/jobs" className="text-xs text-teal-700 dark:text-teal-400 hover:underline">
+            View Job Queue →
+          </Link>
+        </div>
+      ),
+    },
     {
       name: 'Bank feeds',
       description: 'Automatically import transactions from a bank or card via a licensed aggregator (e.g. Plaid-style provider).',
@@ -84,6 +144,17 @@ function IntegrationsContent() {
     <div className="max-w-2xl">
       <PageHeader icon="🔌" eyebrow="Settings" title="Integrations" subtitle={currentOrg?.name} />
 
+      {testEmailMessage && (
+        <div className="mb-4 text-xs text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2">
+          {testEmailMessage}
+        </div>
+      )}
+      {testEmailError && (
+        <div role="alert" className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          {testEmailError}
+        </div>
+      )}
+
       <div className="space-y-4">
         {integrations.map((integration) => (
           <div key={integration.name} className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
@@ -99,6 +170,7 @@ function IntegrationsContent() {
             </div>
             <p className="text-sm text-gray-600 dark:text-gray-400">{integration.description}</p>
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">{integration.detail}</p>
+            {integration.customAction}
             {integration.linkHref && (
               <p className="mt-2 text-xs">
                 <Link href={integration.linkHref} className="text-teal-700 dark:text-teal-400 hover:underline">
