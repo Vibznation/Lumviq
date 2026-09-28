@@ -105,6 +105,23 @@
   - **Integrations Hub**: Live integration status endpoint
     (`GET /api/integrations/status`) reporting active adapter modes and
     configuration status across Payroll, Payments, Bank Feeds, and OCR.
+
+- **Phase 9 expansion**: Automated Workflow & Recurring Runners, 1099 Tax Compliance, Client Portal History, and FX Rate Sync/Revaluation:
+  - **Automated Workflow & Recurring Execution**: Extended background job
+    dispatcher (`src/pages/api/jobs/process.ts`) to handle `recurring.process_due`
+    and `workflow.evaluate`, plus manual batch trigger endpoint
+    `POST /api/recurring/process-due`.
+  - **1099-NEC Tax Compliance & Reporting**: `src/lib/tax-1099.ts` and
+    `GET /api/reports/tax-1099` aggregating calendar-year contractor payments
+    against IRS thresholds ($\ge \$600$), with downloadable IRS-ready CSV
+    export and dedicated reports tab in `/reports`.
+  - **Client Portal History & Invoicing**: Invoices portal (`/portal/invoices/[token]`)
+    surfaces customer account history and real-time payment status.
+  - **Live FX Sync & Period-End Revaluation**: `FxRateProvider` interface
+    (`src/lib/integrations/fx.ts`) with `SandboxFxProvider` and
+    `OpenRatesFxProvider` (`/api/currencies/sync`), plus unrealized FX
+    gain/loss revaluation engine (`src/lib/fx-revaluation.ts` and
+    `/api/currencies/revaluation`).
   (`src/lib/account-reconciliation.ts`); a period close checklist
   (`src/lib/close-checklist.ts`); a fixed asset register with
   straight-line depreciation posting (`src/lib/fixed-assets.ts`); a

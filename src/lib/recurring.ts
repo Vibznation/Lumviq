@@ -103,3 +103,28 @@ export async function runRecurringTemplate(tx: any, template: any, actorId: stri
 
   return created
 }
+
+/**
+ * Finds all active recurring templates whose nextRunDate is on or before now,
+ * generates the corresponding draft invoice/bill, advances nextRunDate, and returns a summary.
+ */
+export async function processDueRecurringTemplates(prismaClient: any, organizationId?: string | null, actorId = 'system') {
+  const where: any = { active: true, nextRunDate: { lte: new Date() } }
+  if (organizationId) where.organizationId = organizationId
+
+  const dueTemplates = await prismaClient.recurringTemplate.findMany({ where })
+  const results: Array<{ templateId: string; type: string; createdId?: string; error?: string }> = []
+
+  for (const template of dueTemplates) {
+    try {
+      const created = await prismaClient.$transaction((tx: any) =>
+        runRecurringTemplate(tx, template, actorId)
+      )
+      results.push({ templateId: template.id, type: template.type, createdId: created.id })
+    } catch (err: any) {
+      results.push({ templateId: template.id, type: template.type, error: err?.message || String(err) })
+    }
+  }
+
+  return results
+}

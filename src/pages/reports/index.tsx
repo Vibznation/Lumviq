@@ -27,7 +27,29 @@ type AccountOption = { id: string; code: string; name: string; type: string }
 type GlLine = { id: string; accountId: string; description: string | null; amount: string; isDebit: boolean; journalEntryId: string; journalEntryDescription: string | null; postedAt: string | null }
 type CashFlow = { operating: number; investing: number; financing: number; netChangeInCash: number; beginningCash: number; endingCash: number; note?: string }
 
-const TABS = ['Financials', 'General Ledger', 'Cash Flow', 'AR Aging', 'AP Aging', 'Tax Summary', 'Inventory Valuation', 'Job Costing', 'Product Profitability', 'Customer Statements'] as const
+type Tax1099Contractor = {
+  contractorId: string
+  contractorName: string
+  businessName: string | null
+  taxClassification: string | null
+  taxIdLast4: string | null
+  email: string | null
+  vendorName: string | null
+  totalPaid: string
+  meetsThreshold: boolean
+  formType: string
+  box: string
+}
+type Tax1099Report = {
+  taxYear: number
+  thresholdMinor: number
+  totalQualifying: string
+  contractorsCount: number
+  qualifyingContractorsCount: number
+  contractors: Tax1099Contractor[]
+}
+
+const TABS = ['Financials', 'General Ledger', 'Cash Flow', 'AR Aging', 'AP Aging', 'Tax Summary', '1099 Tax Report', 'Inventory Valuation', 'Job Costing', 'Product Profitability', 'Customer Statements'] as const
 type Tab = (typeof TABS)[number]
 
 function currency(n: number) {
@@ -79,6 +101,8 @@ function ReportsContent() {
   const [products, setProducts] = useState<Product[]>([])
   const [jobCosting, setJobCosting] = useState<JobCostingRow[]>([])
   const [productProfitability, setProductProfitability] = useState<ProductProfitabilityRow[]>([])
+  const [tax1099, setTax1099] = useState<Tax1099Report | null>(null)
+  const [tax1099Year, setTax1099Year] = useState<number>(new Date().getFullYear())
   const [customers, setCustomers] = useState<Customer[]>([])
   const [statementCustomerId, setStatementCustomerId] = useState('')
   const [statement, setStatement] = useState<CustomerStatementInvoice[] | null>(null)
@@ -129,8 +153,9 @@ function ReportsContent() {
       fetch(`/api/customers?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
       fetch(`/api/accounts?organizationId=${currentOrg.id}`, { headers: authHeaders(token) }),
       fetch(`/api/reports/cash-flow?organizationId=${currentOrg.id}&${p}`, { headers: authHeaders(token) }),
+      fetch(`/api/reports/tax-1099?organizationId=${currentOrg.id}&year=${tax1099Year}`, { headers: authHeaders(token) }),
     ])
-      .then(async ([f, ar, ap, tax, p2, jc, pp, c, acc, cf]) => {
+      .then(async ([f, ar, ap, tax, p2, jc, pp, c, acc, cf, t1099]) => {
         if (!f.ok) throw new Error('Could not load financial reports')
         setFinancials(await f.json())
         setArAging(ar.ok ? await ar.json() : null)
@@ -139,6 +164,7 @@ function ReportsContent() {
         setProducts(p2.ok ? await p2.json() : [])
         setJobCosting(jc.ok ? (await jc.json()).projects : [])
         setProductProfitability(pp.ok ? (await pp.json()).products : [])
+        setTax1099(t1099.ok ? await t1099.json() : null)
         const custList = c.ok ? await c.json() : []
         setCustomers(custList)
         if (custList.length > 0 && !statementCustomerId) setStatementCustomerId(custList[0].id)
@@ -148,7 +174,7 @@ function ReportsContent() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentOrg?.id, token, startDate, endDate, basis, compareEnabled, compareStartDate, compareEndDate, asOfDate])
+  }, [currentOrg?.id, token, startDate, endDate, basis, compareEnabled, compareStartDate, compareEndDate, asOfDate, tax1099Year])
 
   useEffect(() => {
     if (!currentOrg || !statementCustomerId) return
@@ -498,6 +524,92 @@ function ReportsContent() {
               <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-midnight-800">
                 Informational only — Lumviq does not file tax returns on your behalf.
               </p>
+            </div>
+          )}
+
+          {tab === '1099 Tax Report' && (
+            <div className="max-w-4xl space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-3">
+                <div className="flex items-center gap-3">
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Tax Year:</label>
+                  <select
+                    value={tax1099Year}
+                    onChange={(e) => setTax1099Year(Number(e.target.value))}
+                    className="rounded-md border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-100 px-2 py-1 text-sm font-medium"
+                  >
+                    {[2026, 2025, 2024, 2023].map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                {tax1099 && (
+                  <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
+                    <span>Contractors: <strong className="text-gray-900 dark:text-white">{tax1099.contractorsCount}</strong></span>
+                    <span>1099 Required (≥$600): <strong className="text-teal-600 dark:text-teal-400">{tax1099.qualifyingContractorsCount}</strong></span>
+                    <span>Total Qualifying: <strong className="text-gray-900 dark:text-white">{tax1099.totalQualifying}</strong></span>
+                    <a
+                      href={`/api/reports/tax-1099?organizationId=${currentOrg?.id}&year=${tax1099Year}&format=csv`}
+                      download
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 rounded text-xs font-medium hover:bg-teal-100"
+                    >
+                      📥 Download 1099-NEC CSV
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {!tax1099 || tax1099.contractors.length === 0 ? (
+                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-6 text-center text-sm text-gray-500">
+                  No contractors on record for tax year {tax1099Year}. Add contractors under <Link href="/settings/contractors" className="text-teal-600 underline">Settings → Contractors</Link>.
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                      <tr>
+                        <th className="px-4 py-2">Contractor / Business</th>
+                        <th className="px-4 py-2">Tax ID</th>
+                        <th className="px-4 py-2">Classification</th>
+                        <th className="px-4 py-2 text-right">Total Paid ({tax1099Year})</th>
+                        <th className="px-4 py-2 text-center">1099-NEC Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tax1099.contractors.map((c) => (
+                        <tr key={c.contractorId} className="border-t border-gray-100 dark:border-midnight-800">
+                          <td className="px-4 py-2">
+                            <p className="text-gray-900 dark:text-gray-100 font-medium">{c.contractorName}</p>
+                            {c.businessName && <p className="text-xs text-gray-400">{c.businessName}</p>}
+                          </td>
+                          <td className="px-4 py-2 text-xs font-mono text-gray-600 dark:text-gray-400">
+                            {c.taxIdLast4 ? `***-**-${c.taxIdLast4}` : <span className="text-amber-600">Missing W-9</span>}
+                          </td>
+                          <td className="px-4 py-2 text-xs text-gray-600 dark:text-gray-400 capitalize">
+                            {c.taxClassification ? c.taxClassification.replace('_', ' ') : 'Unclassified'}
+                          </td>
+                          <td className="px-4 py-2 text-right font-medium text-gray-900 dark:text-gray-100">
+                            {c.totalPaid}
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            {c.meetsThreshold ? (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800 dark:bg-teal-950/40 dark:text-teal-300">
+                                Required (≥$600)
+                              </span>
+                            ) : (
+                              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-midnight-800 dark:text-gray-400">
+                                Below Threshold
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="px-4 py-2 text-xs text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-midnight-800">
+                    IRS 1099-NEC nonemployee compensation reporting threshold is $600.00. Informational calculation for tax compliance.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

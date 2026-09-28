@@ -11,6 +11,7 @@ interface InvoiceLine {
 }
 
 interface PortalInvoice {
+  id: string
   invoiceNumber: string
   status: string
   issueDate: string
@@ -24,6 +25,15 @@ interface PortalInvoice {
   customer: { name: string; email: string } | null
   organization: { name: string; logoUrl?: string | null; brandColor?: string | null }
   onlinePaymentAvailable: boolean
+  history?: Array<{
+    id: string
+    invoiceNumber: string
+    issueDate: string
+    dueDate: string
+    total: string
+    amountPaid: string
+    status: string
+  }>
 }
 
 export default function InvoicePortalPage() {
@@ -196,6 +206,46 @@ export default function InvoicePortalPage() {
               {!invoice.onlinePaymentAvailable && invoice.status !== 'paid' && (
                 <div className="rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                   Online payment isn&apos;t available for this invoice yet. Please contact {invoice.organization.name} directly to arrange payment.
+                </div>
+              )}
+
+              {invoice.history && invoice.history.length > 1 && (
+                <div className="mt-8 pt-6 border-t border-slate-200">
+                  <h3 className="font-semibold text-slate-900 text-sm mb-3">Account Invoice History</h3>
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-slate-500 text-left font-medium">
+                        <tr>
+                          <th className="px-3 py-2">Invoice #</th>
+                          <th className="px-3 py-2">Issue Date</th>
+                          <th className="px-3 py-2 text-right">Total</th>
+                          <th className="px-3 py-2 text-right">Paid</th>
+                          <th className="px-3 py-2 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoice.history.map((h) => (
+                          <tr key={h.id} className={`border-t border-slate-100 ${h.invoiceNumber === invoice.invoiceNumber ? 'bg-teal-50/50 font-medium' : ''}`}>
+                            <td className="px-3 py-2 text-slate-900">
+                              {h.invoiceNumber}
+                              {h.invoiceNumber === invoice.invoiceNumber && <span className="ml-1.5 text-[10px] text-teal-700 bg-teal-100 px-1 rounded">Current</span>}
+                            </td>
+                            <td className="px-3 py-2 text-slate-500">{new Date(h.issueDate).toLocaleDateString()}</td>
+                            <td className="px-3 py-2 text-right text-slate-900">{h.total}</td>
+                            <td className="px-3 py-2 text-right text-slate-500">{h.amountPaid}</td>
+                            <td className="px-3 py-2 text-center capitalize">
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                h.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                                h.status === 'overdue' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'
+                              }`}>
+                                {h.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </>

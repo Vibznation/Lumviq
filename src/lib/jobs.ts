@@ -16,6 +16,10 @@ export type JobType =
   | 'webhook.delivery'
   | 'email.send'
   | 'recurring.run'
+  | 'recurring.process_due'
+  | 'workflow.evaluate'
+  | 'fx.sync_rates'
+  | 'reporting.cache_refresh'
 
 const BACKOFF_MINUTES = [1, 5, 15, 60, 240]
 

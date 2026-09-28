@@ -15,7 +15,11 @@ function CurrenciesContent() {
   const { token, currentOrg } = useAuth()
   const [rates, setRates] = useState<ExchangeRate[]>([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [revalLoading, setRevalLoading] = useState(false)
+  const [revalSummary, setRevalSummary] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const [form, setForm] = useState({ baseCurrency: 'USD', quoteCurrency: '', rate: '', asOfDate: '' })
   const [submitting, setSubmitting] = useState(false)
 
@@ -39,6 +43,52 @@ function CurrenciesContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id])
 
+  async function handleSyncRates() {
+    if (!currentOrg) return
+    setSyncing(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/currencies/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ organizationId: currentOrg.id, baseCurrency: 'USD' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to sync live rates')
+      setMessage(`Synced ${data.syncedCount} currency rates from ${data.provider}.`)
+      await load()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  async function handleComputeRevaluation() {
+    if (!currentOrg) return
+    setRevalLoading(true)
+    setError(null)
+    try {
+      const currentRates: Record<string, number> = {}
+      rates.forEach((r) => {
+        currentRates[r.quoteCurrency.toUpperCase()] = Number(r.rate)
+      })
+      const res = await fetch('/api/currencies/revaluation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ organizationId: currentOrg.id, baseCurrency: 'USD', currentRates }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to compute revaluation')
+      setRevalSummary(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setRevalLoading(false)
+    }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (!currentOrg || !form.quoteCurrency || !form.rate || !form.asOfDate) return
@@ -61,12 +111,87 @@ function CurrenciesContent() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <PageHeader icon="💱" eyebrow="Settings" title="Currencies & Exchange Rates" subtitle={`${currentOrg?.name || ''} — manually entered rates for conversion and display only`} />
+    <div className="max-w-4xl">
+      <PageHeader
+        icon="💱"
+        eyebrow="Settings"
+        title="Currencies & Exchange Rates"
+        subtitle={`${currentOrg?.name || ''} — sync live exchange rates, enter manual rates, and compute period-end FX revaluations.`}
+      />
+
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSyncRates}
+            disabled={syncing}
+            className="rounded-md bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-1.5 text-xs font-medium shadow-sm transition disabled:opacity-50"
+          >
+            {syncing ? 'Syncing Rates…' : '🔄 Sync Live FX Rates'}
+          </button>
+          <button
+            type="button"
+            onClick={handleComputeRevaluation}
+            disabled={revalLoading}
+            className="rounded-md bg-white dark:bg-midnight-900 border border-teal-300 dark:border-teal-700 text-teal-800 dark:text-teal-200 hover:bg-teal-50 px-3.5 py-1.5 text-xs font-medium transition disabled:opacity-50"
+          >
+            {revalLoading ? 'Analyzing…' : '📈 Period-End FX Revaluation'}
+          </button>
+        </div>
+      </div>
+
+      {message && (
+        <div className="mb-4 text-sm text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md px-3 py-2">
+          {message}
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
           {error}
+        </div>
+      )}
+
+      {revalSummary && (
+        <div className="mb-6 bg-white dark:bg-midnight-900 border border-gray-200 dark:border-midnight-800 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm text-gray-900 dark:text-white">Unrealized FX Gain/Loss Summary</h3>
+            <span className={`text-sm font-bold ${revalSummary.netGainMinor >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              Net Unrealized: {revalSummary.netGainMinor >= 0 ? '+' : '-'}${revalSummary.totalUnrealizedGainLoss} USD
+            </span>
+          </div>
+          {revalSummary.items.length === 0 ? (
+            <p className="text-xs text-gray-500">No open foreign-currency invoices or bills found.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 dark:bg-midnight-800 text-left text-gray-500">
+                  <tr>
+                    <th className="px-2 py-1.5">Type / Ref</th>
+                    <th className="px-2 py-1.5">Party</th>
+                    <th className="px-2 py-1.5 text-right">Foreign Balance</th>
+                    <th className="px-2 py-1.5 text-right">Current Rate</th>
+                    <th className="px-2 py-1.5 text-right">Base Equivalent</th>
+                    <th className="px-2 py-1.5 text-right">Unrealized Gain/(Loss)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {revalSummary.items.map((it: any) => (
+                    <tr key={it.id} className="border-t border-gray-100 dark:border-midnight-800">
+                      <td className="px-2 py-1.5 font-medium uppercase">{it.type}: {it.reference}</td>
+                      <td className="px-2 py-1.5">{it.partyName}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{it.foreignCurrency} {it.foreignAmount}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{it.currentRate}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">${it.currentBaseAmount}</td>
+                      <td className={`px-2 py-1.5 text-right font-semibold ${it.isGain ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {it.isGain ? '+' : '-'}${it.unrealizedGainLoss}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

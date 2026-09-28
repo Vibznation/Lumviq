@@ -66,8 +66,20 @@ function ContractorsContent() {
   }
 
   return (
-    <div className="max-w-2xl">
-      <PageHeader icon="🧾" eyebrow="Settings" title="Contractors (1099)" subtitle={currentOrg?.name} />
+    <div className="max-w-4xl">
+      <PageHeader
+        icon="🧾"
+        eyebrow="Settings"
+        title="Contractors (1099)"
+        subtitle={`${currentOrg?.name || ''} — manage non-employee workers, tax classification, and generate 1099-NEC annual reports.`}
+        actions={[
+          {
+            label: '📊 View 1099 Tax Report',
+            href: `/reports?tab=1099`,
+            variant: 'primary',
+          },
+        ]}
+      />
 
       {error && (
         <div role="alert" className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
