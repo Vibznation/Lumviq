@@ -22,6 +22,7 @@ function OrganizationSettingsContent() {
   const [inviteStatus, setInviteStatus] = useState<string | null>(null)
   const [emailConfigured, setEmailConfigured] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null)
 
   async function loadMembers() {
     if (!currentOrg) return
@@ -35,6 +36,27 @@ function OrganizationSettingsContent() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleRoleChange(memberId: string, newRole: string) {
+    if (!currentOrg || !token) return
+    setUpdatingRoleId(memberId)
+    try {
+      const res = await fetch('/api/orgs/members', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+        body: JSON.stringify({ organizationId: currentOrg.id, memberId, role: newRole }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        throw new Error(j.error || 'Failed to update member role')
+      }
+      await loadMembers()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setUpdatingRoleId(null)
     }
   }
 
@@ -132,7 +154,19 @@ function OrganizationSettingsContent() {
                 <tr key={m.id} className="border-t border-gray-100 dark:border-midnight-800">
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-100">{m.name || '—'}</td>
                   <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{m.email}</td>
-                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">{m.role}</td>
+                  <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                    <select
+                      value={m.role}
+                      disabled={updatingRoleId === m.id}
+                      onChange={(e) => handleRoleChange(m.id, e.target.value)}
+                      className="text-xs rounded border border-gray-300 dark:border-midnight-700 bg-white dark:bg-midnight-800 dark:text-gray-200 px-2 py-1 font-medium capitalize"
+                    >
+                      <option value="owner">Owner (Full admin & approver)</option>
+                      <option value="member">Member</option>
+                      <option value="accountant">Accountant</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </td>
                 </tr>
               ))}
             </tbody>
