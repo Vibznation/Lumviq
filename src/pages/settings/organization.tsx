@@ -13,7 +13,7 @@ type Member = {
 }
 
 function OrganizationSettingsContent() {
-  const { token, currentOrg } = useAuth()
+  const { token, currentOrg, refresh } = useAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +42,7 @@ function OrganizationSettingsContent() {
   async function handleRoleChange(memberId: string, newRole: string) {
     if (!currentOrg || !token) return
     setUpdatingRoleId(memberId)
+    setError(null)
     try {
       const res = await fetch('/api/orgs/members', {
         method: 'PATCH',
@@ -53,6 +54,7 @@ function OrganizationSettingsContent() {
         throw new Error(j.error || 'Failed to update member role')
       }
       await loadMembers()
+      if (refresh) await refresh().catch(() => {})
     } catch (err: any) {
       setError(err.message)
     } finally {
